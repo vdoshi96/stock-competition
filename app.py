@@ -1,11 +1,13 @@
 import datetime
-import json
+import logging
 import time
 from flask import Flask, jsonify, render_template
 
 import yfinance as yf
 
 app = Flask(__name__)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -41,16 +43,33 @@ def _ytd_start() -> str:
     return f"{year}-01-01"
 
 
-def _fetch_history(ticker: str, start: str, end: str):
-    """Download daily close prices for a ticker between start and end dates."""
-    t = yf.Ticker(ticker)
-    df = t.history(start=start, end=end, auto_adjust=True)
-    if df.empty:
-        return None
-    # Keep only Close and format the index as string dates
-    df = df[["Close"]].copy()
-    df.index = df.index.strftime("%Y-%m-%d")
-    return df
+def _download_with_retry(tickers: list[str], start: str, end: str, max_retries: int = 3):
+    """Batch-download daily close prices for all tickers with retry logic."""
+    for attempt in range(1, max_retries + 1):
+        try:
+            logger.info(f"Attempt {attempt}: downloading {len(tickers)} tickers...")
+            df = yf.download(
+                tickers,
+                start=start,
+                end=end,
+                auto_adjust=True,
+                threads=False,       # sequential to avoid rate-limit
+                progress=False,
+            )
+            if df is not None and not df.empty:
+                logger.info(f"Download succeeded on attempt {attempt}, shape={df.shape}")
+                return df
+            logger.warning(f"Attempt {attempt}: empty dataframe returned")
+        except Exception as e:
+            logger.error(f"Attempt {attempt} failed: {e}")
+
+        if attempt < max_retries:
+            wait = attempt * 5
+            logger.info(f"Waiting {wait}s before retry...")
+            time.sleep(wait)
+
+    logger.error("All download attempts failed")
+    return None
 
 
 def _build_data() -> dict:
@@ -68,29 +87,61 @@ def _build_data() -> dict:
             seen.add(t)
             unique_tickers.append(t)
 
-    # Fetch all histories ------------------------------------------------
+    # Batch download all tickers at once -----------------------------------
+    raw_df = _download_with_retry(unique_tickers, start, end)
+
     histories: dict[str, list[dict]] = {}
     ytd_returns: dict[str, float] = {}
 
-    for ticker in unique_tickers:
-        df = _fetch_history(ticker, start, end)
-        if df is None or len(df) < 2:
+    if raw_df is not None and not raw_df.empty:
+        for ticker in unique_tickers:
+            try:
+                # yf.download returns MultiIndex columns: ('Close', 'TICKER')
+                # for multi-ticker downloads, or single-level for single ticker
+                if len(unique_tickers) == 1:
+                    close_series = raw_df["Close"].dropna()
+                else:
+                    if ("Close", ticker) not in raw_df.columns:
+                        # Try alternate: sometimes column is just ticker under Close
+                        if "Close" in raw_df.columns and hasattr(raw_df["Close"], ticker):
+                            close_series = raw_df["Close"][ticker].dropna()
+                        else:
+                            logger.warning(f"No Close data for {ticker}")
+                            histories[ticker] = []
+                            ytd_returns[ticker] = 0.0
+                            continue
+                    else:
+                        close_series = raw_df[("Close", ticker)].dropna()
+
+                if close_series.empty or len(close_series) < 2:
+                    logger.warning(f"Insufficient data for {ticker}: {len(close_series)} rows")
+                    histories[ticker] = []
+                    ytd_returns[ticker] = 0.0
+                    continue
+
+                first_close = float(close_series.iloc[0])
+                last_close = float(close_series.iloc[-1])
+                ytd_pct = ((last_close - first_close) / first_close) * 100
+                ytd_returns[ticker] = round(ytd_pct, 2)
+
+                # Build time-series of cumulative % return for the chart
+                series = []
+                for dt_idx, val in close_series.items():
+                    date_str = dt_idx.strftime("%Y-%m-%d")
+                    cum_return = ((float(val) - first_close) / first_close) * 100
+                    series.append({"date": date_str, "value": round(cum_return, 2)})
+                histories[ticker] = series
+                logger.info(f"{ticker}: YTD {ytd_returns[ticker]}%, {len(series)} data points")
+
+            except Exception as e:
+                logger.error(f"Error processing {ticker}: {e}")
+                histories[ticker] = []
+                ytd_returns[ticker] = 0.0
+    else:
+        logger.error("No data downloaded at all — all tickers will show 0%")
+        for ticker in unique_tickers:
             histories[ticker] = []
             ytd_returns[ticker] = 0.0
-            continue
-
-        first_close = df["Close"].iloc[0]
-        last_close = df["Close"].iloc[-1]
-        ytd_pct = ((last_close - first_close) / first_close) * 100
-
-        ytd_returns[ticker] = round(ytd_pct, 2)
-
-        # Build time-series of cumulative % return for the chart
-        series = []
-        for date_str, row in df.iterrows():
-            cum_return = ((row["Close"] - first_close) / first_close) * 100
-            series.append({"date": date_str, "value": round(cum_return, 2)})
-        histories[ticker] = series
 
     # Build per-user data ------------------------------------------------
     users = []
@@ -130,7 +181,6 @@ def _build_data() -> dict:
         })
 
     # Build daily group-average time series --------------------------------
-    # Collect all dates across user tickers
     all_dates = set()
     user_tickers = list(USERS.values())
     for ticker in user_tickers:
@@ -197,9 +247,21 @@ def api_data():
     return jsonify(data)
 
 
+@app.route("/api/health")
+def health():
+    """Health check endpoint — also useful for debugging on Render."""
+    data = get_data()
+    has_data = any(u["ytd_return"] != 0.0 for u in data["users"])
+    return jsonify({
+        "status": "ok" if has_data else "no_data",
+        "tickers_with_data": sum(1 for u in data["users"] if u["ytd_return"] != 0.0),
+        "total_tickers": len(data["users"]),
+        "updated_at": data["updated_at"],
+    })
+
+
 # ---------------------------------------------------------------------------
 # Run
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5050)
-
