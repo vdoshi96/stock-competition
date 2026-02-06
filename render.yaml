@@ -7,4 +7,5 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: "3.11"
-
+      - key: TWELVEDATA_API_KEY
+        sync: false  # set this manually in the Render dashboard

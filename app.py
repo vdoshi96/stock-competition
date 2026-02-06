@@ -1,9 +1,10 @@
 import datetime
 import logging
+import os
 import time
-from flask import Flask, jsonify, render_template
 
-import yfinance as yf
+import requests as http_requests
+from flask import Flask, jsonify, render_template
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -29,7 +30,10 @@ BENCHMARKS = ["SPY", "VT", "VTI"]
 CRYPTO_ADJACENT = {"COIN", "HOOD"}
 
 STARTING_BALANCE = 1000.0
-CACHE_TTL = 900  # 15 minutes in seconds
+CACHE_TTL = 3600  # 1 hour — keeps us well within free tier (800 req/day)
+
+TWELVEDATA_API_KEY = os.environ.get("TWELVEDATA_API_KEY", "")
+TWELVEDATA_BASE = "https://api.twelvedata.com"
 
 # ---------------------------------------------------------------------------
 # Simple in-memory cache
@@ -38,45 +42,61 @@ _cache: dict = {"data": None, "ts": 0}
 
 
 def _ytd_start() -> str:
-    """Return the first trading day of the current year as 'YYYY-MM-DD'."""
+    """Return Jan 1 of the current year as 'YYYY-MM-DD'."""
     year = datetime.date.today().year
     return f"{year}-01-01"
 
 
-def _download_with_retry(tickers: list[str], start: str, end: str, max_retries: int = 3):
-    """Batch-download daily close prices for all tickers with retry logic."""
-    for attempt in range(1, max_retries + 1):
-        try:
-            logger.info(f"Attempt {attempt}: downloading {len(tickers)} tickers...")
-            df = yf.download(
-                tickers,
-                start=start,
-                end=end,
-                auto_adjust=True,
-                threads=False,       # sequential to avoid rate-limit
-                progress=False,
-            )
-            if df is not None and not df.empty:
-                logger.info(f"Download succeeded on attempt {attempt}, shape={df.shape}")
-                return df
-            logger.warning(f"Attempt {attempt}: empty dataframe returned")
-        except Exception as e:
-            logger.error(f"Attempt {attempt} failed: {e}")
+def _fetch_ticker(ticker: str, start: str, end: str) -> list[dict] | None:
+    """Fetch daily close prices for a single ticker from Twelve Data."""
+    url = f"{TWELVEDATA_BASE}/time_series"
+    params = {
+        "symbol": ticker,
+        "interval": "1day",
+        "start_date": start,
+        "end_date": end,
+        "apikey": TWELVEDATA_API_KEY,
+        "order": "ASC",       # oldest first
+        "outputsize": 5000,
+    }
 
-        if attempt < max_retries:
-            wait = attempt * 5
-            logger.info(f"Waiting {wait}s before retry...")
-            time.sleep(wait)
+    try:
+        resp = http_requests.get(url, params=params, timeout=15)
+        data = resp.json()
 
-    logger.error("All download attempts failed")
-    return None
+        if data.get("status") == "error":
+            logger.error(f"Twelve Data error for {ticker}: {data.get('message')}")
+            return None
+
+        values = data.get("values")
+        if not values:
+            logger.warning(f"No values returned for {ticker}")
+            return None
+
+        # Convert to list of {date, close}
+        result = []
+        for v in values:
+            try:
+                result.append({
+                    "date": v["datetime"],
+                    "close": float(v["close"]),
+                })
+            except (KeyError, ValueError) as e:
+                continue
+
+        logger.info(f"{ticker}: got {len(result)} data points")
+        return result
+
+    except Exception as e:
+        logger.error(f"Failed to fetch {ticker}: {e}")
+        return None
 
 
 def _build_data() -> dict:
     """Fetch YTD data for all user stocks and benchmarks, compute metrics."""
     today = datetime.date.today()
     start = _ytd_start()
-    end = (today + datetime.timedelta(days=1)).isoformat()
+    end = today.isoformat()
 
     all_tickers = list(USERS.values()) + BENCHMARKS
     # De-duplicate while preserving order
@@ -87,61 +107,35 @@ def _build_data() -> dict:
             seen.add(t)
             unique_tickers.append(t)
 
-    # Batch download all tickers at once -----------------------------------
-    raw_df = _download_with_retry(unique_tickers, start, end)
-
+    # Fetch all tickers ----------------------------------------------------
     histories: dict[str, list[dict]] = {}
     ytd_returns: dict[str, float] = {}
 
-    if raw_df is not None and not raw_df.empty:
-        for ticker in unique_tickers:
-            try:
-                # yf.download returns MultiIndex columns: ('Close', 'TICKER')
-                # for multi-ticker downloads, or single-level for single ticker
-                if len(unique_tickers) == 1:
-                    close_series = raw_df["Close"].dropna()
-                else:
-                    if ("Close", ticker) not in raw_df.columns:
-                        # Try alternate: sometimes column is just ticker under Close
-                        if "Close" in raw_df.columns and hasattr(raw_df["Close"], ticker):
-                            close_series = raw_df["Close"][ticker].dropna()
-                        else:
-                            logger.warning(f"No Close data for {ticker}")
-                            histories[ticker] = []
-                            ytd_returns[ticker] = 0.0
-                            continue
-                    else:
-                        close_series = raw_df[("Close", ticker)].dropna()
+    for ticker in unique_tickers:
+        raw = _fetch_ticker(ticker, start, end)
 
-                if close_series.empty or len(close_series) < 2:
-                    logger.warning(f"Insufficient data for {ticker}: {len(close_series)} rows")
-                    histories[ticker] = []
-                    ytd_returns[ticker] = 0.0
-                    continue
-
-                first_close = float(close_series.iloc[0])
-                last_close = float(close_series.iloc[-1])
-                ytd_pct = ((last_close - first_close) / first_close) * 100
-                ytd_returns[ticker] = round(ytd_pct, 2)
-
-                # Build time-series of cumulative % return for the chart
-                series = []
-                for dt_idx, val in close_series.items():
-                    date_str = dt_idx.strftime("%Y-%m-%d")
-                    cum_return = ((float(val) - first_close) / first_close) * 100
-                    series.append({"date": date_str, "value": round(cum_return, 2)})
-                histories[ticker] = series
-                logger.info(f"{ticker}: YTD {ytd_returns[ticker]}%, {len(series)} data points")
-
-            except Exception as e:
-                logger.error(f"Error processing {ticker}: {e}")
-                histories[ticker] = []
-                ytd_returns[ticker] = 0.0
-    else:
-        logger.error("No data downloaded at all — all tickers will show 0%")
-        for ticker in unique_tickers:
+        if not raw or len(raw) < 2:
             histories[ticker] = []
             ytd_returns[ticker] = 0.0
+            # Small delay to avoid rate-limit (8 req/min on free tier)
+            time.sleep(0.5)
+            continue
+
+        first_close = raw[0]["close"]
+        last_close = raw[-1]["close"]
+        ytd_pct = ((last_close - first_close) / first_close) * 100
+        ytd_returns[ticker] = round(ytd_pct, 2)
+
+        # Build time-series of cumulative % return
+        series = []
+        for pt in raw:
+            cum_return = ((pt["close"] - first_close) / first_close) * 100
+            series.append({"date": pt["date"], "value": round(cum_return, 2)})
+        histories[ticker] = series
+        logger.info(f"{ticker}: YTD {ytd_returns[ticker]}%")
+
+        # Small delay between requests
+        time.sleep(0.5)
 
     # Build per-user data ------------------------------------------------
     users = []
@@ -249,11 +243,12 @@ def api_data():
 
 @app.route("/api/health")
 def health():
-    """Health check endpoint — also useful for debugging on Render."""
+    """Health check endpoint for debugging."""
     data = get_data()
     has_data = any(u["ytd_return"] != 0.0 for u in data["users"])
     return jsonify({
         "status": "ok" if has_data else "no_data",
+        "api_key_set": bool(TWELVEDATA_API_KEY),
         "tickers_with_data": sum(1 for u in data["users"] if u["ytd_return"] != 0.0),
         "total_tickers": len(data["users"]),
         "updated_at": data["updated_at"],
