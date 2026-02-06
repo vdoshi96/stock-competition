@@ -141,7 +141,7 @@
 
     <!-- Footer -->
     <footer class="max-w-7xl mx-auto px-4 sm:px-6 py-6 text-center text-xs text-gray-400">
-        Data sourced from Yahoo Finance &middot; Refreshes every 15 minutes
+        Data sourced from Twelve Data &middot; Refreshes every hour
     </footer>
 
 <script>
@@ -172,6 +172,18 @@ async function loadData() {
     try {
         const resp = await fetch('/api/data');
         const data = await resp.json();
+
+        // If the backend is still loading data, show a message and auto-retry
+        if (data._loading) {
+            document.getElementById('loading').innerHTML = `
+                <div class="w-10 h-10 border-4 border-brand-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+                <p class="text-gray-500 text-sm">Fetching stock data from API...</p>
+                <p class="text-gray-400 text-xs mt-2">This takes ~90 seconds on first load. Hang tight!</p>
+            `;
+            setTimeout(loadData, 10000); // Retry every 10 seconds
+            return;
+        }
+
         render(data);
     } catch (err) {
         console.error('Failed to load data:', err);
