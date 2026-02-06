@@ -1,0 +1,9 @@
+Nikhil - $ZETA 
+Achu - $ASTS 
+Vishal - $GLDM
+Siddu - $COIN
+Singh - $MU
+Satwik - $HOOD
+Adi - $AMZN 
+Nari - $SOFI 
+Saurya - $GME

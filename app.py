@@ -20,6 +20,7 @@ USERS = {
     "Satwik": "HOOD",
     "Adi": "AMZN",
     "Nari": "SOFI",
+    "Saurya": "GME",
 }
 
 BENCHMARKS = ["SPY", "VT", "VTI"]
