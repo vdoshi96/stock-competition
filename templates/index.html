@@ -178,7 +178,7 @@ async function loadData() {
             document.getElementById('loading').innerHTML = `
                 <div class="w-10 h-10 border-4 border-brand-600 border-t-transparent rounded-full animate-spin mb-4"></div>
                 <p class="text-gray-500 text-sm">Fetching stock data from API...</p>
-                <p class="text-gray-400 text-xs mt-2">This takes ~90 seconds on first load. Hang tight!</p>
+                <p class="text-gray-400 text-xs mt-2">This takes ~15 seconds on first load. Hang tight!</p>
             `;
             setTimeout(loadData, 10000); // Retry every 10 seconds
             return;

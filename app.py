@@ -33,102 +33,70 @@ CRYPTO_ADJACENT = {"COIN", "HOOD"}
 STARTING_BALANCE = 1000.0
 CACHE_TTL = 3600  # 1 hour
 
-TWELVEDATA_API_KEY = os.environ.get("TWELVEDATA_API_KEY", "")
-TWELVEDATA_BASE = "https://api.twelvedata.com"
-
-RATE_LIMIT_PER_MIN = 8  # Twelve Data free tier: 8 requests per minute
+FINNHUB_API_KEY = os.environ.get("FINNHUB_API_KEY", "")
+FINNHUB_BASE = "https://finnhub.io/api/v1"
 
 # ---------------------------------------------------------------------------
-# In-memory cache + background refresh state
+# Cache
 # ---------------------------------------------------------------------------
 _cache: dict = {"data": None, "ts": 0, "loading": False}
 _lock = threading.Lock()
 
 
-def _ytd_start() -> str:
+def _ytd_start_ts() -> int:
+    """Unix timestamp for Jan 1 of the current year."""
     year = datetime.date.today().year
-    return f"{year}-01-01"
+    return int(datetime.datetime(year, 1, 1).timestamp())
 
 
-def _fetch_ticker(ticker: str, start: str, end: str) -> list[dict] | None:
-    """Fetch daily close prices for a single ticker from Twelve Data."""
-    url = f"{TWELVEDATA_BASE}/time_series"
+def _now_ts() -> int:
+    """Current unix timestamp."""
+    return int(time.time())
+
+
+def _fetch_ticker(ticker: str, from_ts: int, to_ts: int) -> list[dict] | None:
+    """Fetch daily candles for a ticker from FinnHub (60 calls/min free)."""
+    url = f"{FINNHUB_BASE}/stock/candle"
     params = {
         "symbol": ticker,
-        "interval": "1day",
-        "start_date": start,
-        "end_date": end,
-        "apikey": TWELVEDATA_API_KEY,
-        "order": "ASC",
-        "outputsize": 5000,
+        "resolution": "D",
+        "from": from_ts,
+        "to": to_ts,
+        "token": FINNHUB_API_KEY,
     }
 
-    for attempt in range(1, 3):
-        try:
-            resp = http_requests.get(url, params=params, timeout=20)
-            data = resp.json()
+    try:
+        resp = http_requests.get(url, params=params, timeout=15)
+        data = resp.json()
 
-            if data.get("code") == 429:
-                logger.warning(f"{ticker}: rate limited, waiting 62s (attempt {attempt})")
-                time.sleep(62)
-                continue
+        if data.get("s") != "ok":
+            logger.warning(f"{ticker}: no data (status={data.get('s')})")
+            return None
 
-            if data.get("status") == "error":
-                logger.error(f"Twelve Data error for {ticker}: {data.get('message')}")
-                return None
+        closes = data.get("c", [])
+        timestamps = data.get("t", [])
 
-            values = data.get("values")
-            if not values:
-                logger.warning(f"No values returned for {ticker}")
-                return None
+        if not closes or not timestamps or len(closes) < 2:
+            logger.warning(f"{ticker}: insufficient data ({len(closes)} points)")
+            return None
 
-            result = []
-            for v in values:
-                try:
-                    result.append({
-                        "date": v["datetime"],
-                        "close": float(v["close"]),
-                    })
-                except (KeyError, ValueError):
-                    continue
+        result = []
+        for ts, close in zip(timestamps, closes):
+            date_str = datetime.datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d")
+            result.append({"date": date_str, "close": float(close)})
 
-            logger.info(f"{ticker}: got {len(result)} data points")
-            return result
+        logger.info(f"{ticker}: got {len(result)} data points")
+        return result
 
-        except Exception as e:
-            logger.error(f"Failed to fetch {ticker} (attempt {attempt}): {e}")
-            if attempt < 2:
-                time.sleep(10)
-
-    return None
-
-
-def _fetch_all_tickers(tickers: list[str], start: str, end: str) -> dict[str, list[dict]]:
-    """Fetch all tickers while respecting the 8 req/min rate limit."""
-    results: dict[str, list[dict]] = {}
-    request_count = 0
-
-    for i, ticker in enumerate(tickers):
-        if request_count > 0 and request_count % RATE_LIMIT_PER_MIN == 0:
-            logger.info(f"Rate limit pause: waiting 62s after {request_count} requests...")
-            time.sleep(62)
-
-        logger.info(f"Fetching {ticker} ({i+1}/{len(tickers)})...")
-        raw = _fetch_ticker(ticker, start, end)
-        results[ticker] = raw if raw else []
-        request_count += 1
-
-        if i < len(tickers) - 1:
-            time.sleep(1)
-
-    return results
+    except Exception as e:
+        logger.error(f"Failed to fetch {ticker}: {e}")
+        return None
 
 
 def _build_data() -> dict:
-    """Fetch YTD data for all user stocks and benchmarks, compute metrics."""
-    today = datetime.date.today()
-    start = _ytd_start()
-    end = today.isoformat()
+    """Fetch YTD data for all stocks and benchmarks, compute metrics."""
+    from_ts = _ytd_start_ts()
+    to_ts = _now_ts()
 
     all_tickers = list(USERS.values()) + BENCHMARKS
     seen = set()
@@ -138,17 +106,18 @@ def _build_data() -> dict:
             seen.add(t)
             unique_tickers.append(t)
 
-    raw_data = _fetch_all_tickers(unique_tickers, start, end)
-
+    # Fetch all tickers — FinnHub allows 60/min so no pausing needed
     histories: dict[str, list[dict]] = {}
     ytd_returns: dict[str, float] = {}
 
-    for ticker in unique_tickers:
-        raw = raw_data.get(ticker, [])
+    for i, ticker in enumerate(unique_tickers):
+        logger.info(f"Fetching {ticker} ({i+1}/{len(unique_tickers)})...")
+        raw = _fetch_ticker(ticker, from_ts, to_ts)
 
         if not raw or len(raw) < 2:
             histories[ticker] = []
             ytd_returns[ticker] = 0.0
+            time.sleep(0.3)
             continue
 
         first_close = raw[0]["close"]
@@ -162,6 +131,9 @@ def _build_data() -> dict:
             series.append({"date": pt["date"], "value": round(cum_return, 2)})
         histories[ticker] = series
         logger.info(f"{ticker}: YTD {ytd_returns[ticker]}%")
+
+        # Small courtesy delay (60/min limit is generous, this is just polite)
+        time.sleep(0.3)
 
     # Per-user data
     users = []
@@ -231,24 +203,21 @@ def _build_data() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Background data refresh — runs in a separate thread so web requests
-# never block on the slow, rate-limited API calls.
+# Background refresh — fetches data without blocking web requests
 # ---------------------------------------------------------------------------
 
 def _refresh_cache():
-    """Fetch fresh data and update the cache. Called from a background thread."""
     with _lock:
         if _cache["loading"]:
-            logger.info("Refresh already in progress, skipping")
             return
         _cache["loading"] = True
 
     try:
-        logger.info("Background refresh: starting data fetch...")
+        logger.info("Background refresh: starting...")
         data = _build_data()
         _cache["data"] = data
         _cache["ts"] = time.time()
-        logger.info("Background refresh: complete!")
+        logger.info("Background refresh: done!")
     except Exception as e:
         logger.error(f"Background refresh failed: {e}")
     finally:
@@ -256,32 +225,24 @@ def _refresh_cache():
 
 
 def _schedule_refresh_loop():
-    """Continuously refresh data in the background every CACHE_TTL seconds."""
-    # Initial fetch on startup
     _refresh_cache()
-
     while True:
         time.sleep(CACHE_TTL)
         _refresh_cache()
 
 
 def get_data() -> dict:
-    """Return cached data instantly. If no data yet, return a loading placeholder."""
     if _cache["data"] is not None:
         return _cache["data"]
 
-    # No data yet — trigger a refresh if not already running
     if not _cache["loading"]:
         threading.Thread(target=_refresh_cache, daemon=True).start()
 
-    # Return a loading placeholder
     return {
         "users": [{"name": n, "ticker": t, "ytd_return": 0, "balance": 1000, "crypto_adjacent": t in CRYPTO_ADJACENT} for n, t in USERS.items()],
         "benchmarks": [{"ticker": t, "ytd_return": 0, "balance": 1000} for t in BENCHMARKS],
-        "group_avg": 0,
-        "filtered_avg": 0,
-        "group_avg_history": [],
-        "filtered_avg_history": [],
+        "group_avg": 0, "filtered_avg": 0,
+        "group_avg_history": [], "filtered_avg_history": [],
         "histories": {},
         "updated_at": "Loading data...",
         "_loading": True,
@@ -299,19 +260,18 @@ def index():
 
 @app.route("/api/data")
 def api_data():
-    data = get_data()
-    return jsonify(data)
+    return jsonify(get_data())
 
 
 @app.route("/api/health")
 def health():
     data = _cache["data"]
     if data is None:
-        return jsonify({"status": "loading", "loading": _cache["loading"], "api_key_set": bool(TWELVEDATA_API_KEY)})
+        return jsonify({"status": "loading", "loading": _cache["loading"], "api_key_set": bool(FINNHUB_API_KEY)})
     has_data = any(u["ytd_return"] != 0.0 for u in data["users"])
     return jsonify({
         "status": "ok" if has_data else "no_data",
-        "api_key_set": bool(TWELVEDATA_API_KEY),
+        "api_key_set": bool(FINNHUB_API_KEY),
         "tickers_with_data": sum(1 for u in data["users"] if u["ytd_return"] != 0.0),
         "total_tickers": len(data["users"]),
         "updated_at": data["updated_at"],
@@ -319,14 +279,9 @@ def health():
     })
 
 
-# ---------------------------------------------------------------------------
-# Start background refresh thread on import (works with gunicorn)
-# ---------------------------------------------------------------------------
+# Start background refresh on import
 _bg_thread = threading.Thread(target=_schedule_refresh_loop, daemon=True)
 _bg_thread.start()
 
-# ---------------------------------------------------------------------------
-# Run
-# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5050, use_reloader=False)
