@@ -47,6 +47,10 @@ def _ytd_start() -> str:
     return f"{year}-01-01"
 
 
+RATE_LIMIT_PER_MIN = 8   # Twelve Data free tier: 8 requests per minute
+RATE_LIMIT_DELAY = 60.0 / RATE_LIMIT_PER_MIN + 0.5  # ~8s between requests
+
+
 def _fetch_ticker(ticker: str, start: str, end: str) -> list[dict] | None:
     """Fetch daily close prices for a single ticker from Twelve Data."""
     url = f"{TWELVEDATA_BASE}/time_series"
@@ -60,36 +64,69 @@ def _fetch_ticker(ticker: str, start: str, end: str) -> list[dict] | None:
         "outputsize": 5000,
     }
 
-    try:
-        resp = http_requests.get(url, params=params, timeout=15)
-        data = resp.json()
+    for attempt in range(1, 3):  # up to 2 attempts
+        try:
+            resp = http_requests.get(url, params=params, timeout=20)
+            data = resp.json()
 
-        if data.get("status") == "error":
-            logger.error(f"Twelve Data error for {ticker}: {data.get('message')}")
-            return None
-
-        values = data.get("values")
-        if not values:
-            logger.warning(f"No values returned for {ticker}")
-            return None
-
-        # Convert to list of {date, close}
-        result = []
-        for v in values:
-            try:
-                result.append({
-                    "date": v["datetime"],
-                    "close": float(v["close"]),
-                })
-            except (KeyError, ValueError) as e:
+            if data.get("code") == 429:
+                # Rate limited — wait and retry
+                logger.warning(f"{ticker}: rate limited, waiting 60s (attempt {attempt})")
+                time.sleep(62)
                 continue
 
-        logger.info(f"{ticker}: got {len(result)} data points")
-        return result
+            if data.get("status") == "error":
+                logger.error(f"Twelve Data error for {ticker}: {data.get('message')}")
+                return None
 
-    except Exception as e:
-        logger.error(f"Failed to fetch {ticker}: {e}")
-        return None
+            values = data.get("values")
+            if not values:
+                logger.warning(f"No values returned for {ticker}")
+                return None
+
+            # Convert to list of {date, close}
+            result = []
+            for v in values:
+                try:
+                    result.append({
+                        "date": v["datetime"],
+                        "close": float(v["close"]),
+                    })
+                except (KeyError, ValueError):
+                    continue
+
+            logger.info(f"{ticker}: got {len(result)} data points")
+            return result
+
+        except Exception as e:
+            logger.error(f"Failed to fetch {ticker} (attempt {attempt}): {e}")
+            if attempt < 2:
+                time.sleep(10)
+
+    return None
+
+
+def _fetch_all_tickers(tickers: list[str], start: str, end: str) -> dict[str, list[dict]]:
+    """Fetch all tickers while respecting the 8 req/min rate limit."""
+    results: dict[str, list[dict]] = {}
+    request_count = 0
+
+    for i, ticker in enumerate(tickers):
+        # Every 8 requests, pause to respect rate limit
+        if request_count > 0 and request_count % RATE_LIMIT_PER_MIN == 0:
+            logger.info(f"Rate limit pause: waiting 62s after {request_count} requests...")
+            time.sleep(62)
+
+        logger.info(f"Fetching {ticker} ({i+1}/{len(tickers)})...")
+        raw = _fetch_ticker(ticker, start, end)
+        results[ticker] = raw if raw else []
+        request_count += 1
+
+        # Small gap between individual requests within a batch
+        if i < len(tickers) - 1:
+            time.sleep(1)
+
+    return results
 
 
 def _build_data() -> dict:
@@ -107,18 +144,18 @@ def _build_data() -> dict:
             seen.add(t)
             unique_tickers.append(t)
 
-    # Fetch all tickers ----------------------------------------------------
+    # Fetch all tickers with rate limiting ---------------------------------
+    raw_data = _fetch_all_tickers(unique_tickers, start, end)
+
     histories: dict[str, list[dict]] = {}
     ytd_returns: dict[str, float] = {}
 
     for ticker in unique_tickers:
-        raw = _fetch_ticker(ticker, start, end)
+        raw = raw_data.get(ticker, [])
 
         if not raw or len(raw) < 2:
             histories[ticker] = []
             ytd_returns[ticker] = 0.0
-            # Small delay to avoid rate-limit (8 req/min on free tier)
-            time.sleep(0.5)
             continue
 
         first_close = raw[0]["close"]
@@ -133,9 +170,6 @@ def _build_data() -> dict:
             series.append({"date": pt["date"], "value": round(cum_return, 2)})
         histories[ticker] = series
         logger.info(f"{ticker}: YTD {ytd_returns[ticker]}%")
-
-        # Small delay between requests
-        time.sleep(0.5)
 
     # Build per-user data ------------------------------------------------
     users = []
