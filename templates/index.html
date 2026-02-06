@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Competition Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <style>
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+        /* Smooth loading */
+        .fade-in { animation: fadeIn 0.5s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Positive / negative colors */
+        .text-gain { color: #16a34a; }
+        .text-loss { color: #dc2626; }
+        .bg-gain { background-color: #dcfce7; }
+        .bg-loss { background-color: #fee2e2; }
+
+        body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+
+        /* Active highlight for clickable chart */
+        #ytd-chart { cursor: pointer; }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { 50: '#eff6ff', 100: '#dbeafe', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8', 900: '#1e3a5f' }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 bg-brand-600 rounded-lg flex items-center justify-center">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-lg sm:text-xl font-bold text-gray-900">Stock Competition</h1>
+                    <p class="text-xs text-gray-500 hidden sm:block">YTD Performance Tracker</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <span id="updated-at" class="text-xs text-gray-400"></span>
+                <button onclick="loadData()" id="refresh-btn" class="p-2 rounded-lg hover:bg-gray-100 transition" title="Refresh data">
+                    <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Loading State -->
+    <div id="loading" class="flex flex-col items-center justify-center py-32">
+        <div class="w-10 h-10 border-4 border-brand-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p class="text-gray-500 text-sm">Fetching latest stock data...</p>
+    </div>
+
+    <!-- Main Content (hidden until data loads) -->
+    <main id="content" class="hidden max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+        <!-- Comparison Cards Row -->
+        <section id="comparison-cards" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 fade-in">
+            <!-- Filled by JS -->
+        </section>
+
+        <!-- Leaderboard Table -->
+        <section class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden fade-in">
+            <div class="px-5 py-4 border-b border-gray-100">
+                <h2 class="text-base font-semibold text-gray-900">Leaderboard</h2>
+                <p class="text-xs text-gray-500 mt-0.5">Ranked by YTD return &middot; Starting balance $1,000</p>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
+                            <th class="px-5 py-3 text-left font-medium">#</th>
+                            <th class="px-5 py-3 text-left font-medium">User</th>
+                            <th class="px-5 py-3 text-left font-medium">Ticker</th>
+                            <th class="px-5 py-3 text-right font-medium">YTD %</th>
+                            <th class="px-5 py-3 text-right font-medium">Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leaderboard-body" class="divide-y divide-gray-100">
+                        <!-- Filled by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Charts Row -->
+        <section class="grid grid-cols-1 lg:grid-cols-2 gap-6 fade-in">
+            <!-- YTD Performance Chart -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+                <div class="flex items-center justify-between mb-1">
+                    <h2 class="text-base font-semibold text-gray-900">YTD Performance</h2>
+                    <button id="ytd-reset-btn" onclick="resetYTDChart()" class="hidden text-xs px-2.5 py-1 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600 transition">
+                        Show All
+                    </button>
+                </div>
+                <p class="text-xs text-gray-500 mb-4">Cumulative % return since Jan 1 &middot; Click a line to isolate it</p>
+                <div class="relative" style="height: 350px;">
+                    <canvas id="ytd-chart"></canvas>
+                </div>
+            </div>
+
+            <!-- Balance Bar Chart -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+                <h2 class="text-base font-semibold text-gray-900 mb-1">Current Balances</h2>
+                <p class="text-xs text-gray-500 mb-4">Portfolio value from $1,000 starting investment</p>
+                <div class="relative" style="height: 350px;">
+                    <canvas id="balance-chart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Benchmark Comparison Line Chart -->
+        <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 fade-in">
+            <h2 class="text-base font-semibold text-gray-900 mb-1">Group Average vs Benchmarks</h2>
+            <p class="text-xs text-gray-500 mb-4">All-group average &amp; filtered average (excl. COIN, HOOD) compared to SPY, VT, VTI</p>
+            <div class="relative" style="height: 300px;">
+                <canvas id="benchmark-chart"></canvas>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="max-w-7xl mx-auto px-4 sm:px-6 py-6 text-center text-xs text-gray-400">
+        Data sourced from Yahoo Finance &middot; Refreshes every 15 minutes
+    </footer>
+
+<script>
+// ========================================================================
+// Color palette
+// ========================================================================
+const COLORS = [
+    '#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6',
+    '#ec4899', '#06b6d4', '#f97316',
+];
+const BENCHMARK_COLORS = { SPY: '#1e293b', VT: '#64748b', VTI: '#94a3b8' };
+
+let ytdChartInstance = null;
+let balanceChartInstance = null;
+let benchmarkChartInstance = null;
+
+// Track original dataset styling for highlight/reset
+let ytdOriginalStyles = [];
+let ytdHighlightedIndex = -1;
+
+// ========================================================================
+// Load data from API
+// ========================================================================
+async function loadData() {
+    const btn = document.getElementById('refresh-btn');
+    btn.classList.add('animate-spin');
+
+    try {
+        const resp = await fetch('/api/data');
+        const data = await resp.json();
+        render(data);
+    } catch (err) {
+        console.error('Failed to load data:', err);
+        document.getElementById('loading').innerHTML =
+            '<p class="text-red-500 text-sm">Failed to load data. Please refresh the page.</p>';
+    } finally {
+        btn.classList.remove('animate-spin');
+    }
+}
+
+// ========================================================================
+// Render everything
+// ========================================================================
+function render(data) {
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('content').classList.remove('hidden');
+    document.getElementById('updated-at').textContent = 'Updated ' + data.updated_at;
+
+    renderComparisonCards(data);
+    renderLeaderboard(data);
+    renderYTDChart(data);
+    renderBalanceChart(data);
+    renderBenchmarkChart(data);
+}
+
+// ========================================================================
+// Comparison Cards — now includes Group Avg + Filtered Avg
+// ========================================================================
+function renderComparisonCards(data) {
+    const container = document.getElementById('comparison-cards');
+    const items = [
+        {
+            label: 'Group Avg',
+            value: data.group_avg,
+            sub: 'All 8 picks averaged',
+            accent: true,
+        },
+        {
+            label: 'Filtered Avg',
+            value: data.filtered_avg,
+            sub: 'Excl. COIN & HOOD',
+            accent: true,
+        },
+        ...data.benchmarks.map(b => ({
+            label: `$${b.ticker}`,
+            value: b.ytd_return,
+            sub: `Balance: $${b.balance.toLocaleString()}`,
+            accent: false,
+        })),
+    ];
+
+    container.innerHTML = items.map(item => {
+        const positive = item.value >= 0;
+        const borderClass = item.accent ? 'border-brand-500 border-2' : 'border-gray-200';
+        return `
+        <div class="bg-white rounded-xl shadow-sm ${borderClass} p-5">
+            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">${item.label}</p>
+            <p class="text-2xl font-bold mt-1 ${positive ? 'text-gain' : 'text-loss'}">
+                ${positive ? '+' : ''}${item.value.toFixed(2)}%
+            </p>
+            <p class="text-xs text-gray-400 mt-1">${item.sub}</p>
+        </div>`;
+    }).join('');
+}
+
+// ========================================================================
+// Leaderboard Table
+// ========================================================================
+function renderLeaderboard(data) {
+    const tbody = document.getElementById('leaderboard-body');
+    tbody.innerHTML = data.users.map((u, i) => {
+        const positive = u.ytd_return >= 0;
+        const badge = u.crypto_adjacent
+            ? '<span class="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">Crypto-adj</span>'
+            : '';
+        return `
+        <tr class="hover:bg-gray-50 transition">
+            <td class="px-5 py-3 text-gray-400 font-medium">${i + 1}</td>
+            <td class="px-5 py-3 font-medium text-gray-900">${u.name}</td>
+            <td class="px-5 py-3 text-gray-600">$${u.ticker}${badge}</td>
+            <td class="px-5 py-3 text-right font-semibold ${positive ? 'text-gain' : 'text-loss'}">
+                ${positive ? '+' : ''}${u.ytd_return.toFixed(2)}%
+            </td>
+            <td class="px-5 py-3 text-right font-medium text-gray-900">
+                $${u.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+// ========================================================================
+// YTD Performance Line Chart — with click-to-isolate
+// ========================================================================
+function renderYTDChart(data) {
+    const ctx = document.getElementById('ytd-chart').getContext('2d');
+    if (ytdChartInstance) ytdChartInstance.destroy();
+
+    // Collect all unique dates
+    const allDates = new Set();
+    Object.values(data.histories).forEach(series => {
+        series.forEach(pt => allDates.add(pt.date));
+    });
+    const dates = [...allDates].sort();
+
+    const datasets = [];
+
+    // User stocks + benchmarks
+    Object.entries(data.histories).forEach(([ticker, series], idx) => {
+        const isBenchmark = ['SPY', 'VT', 'VTI'].includes(ticker);
+        const isUserTicker = data.users.some(u => u.ticker === ticker);
+
+        if (!isUserTicker && !isBenchmark) return;
+
+        const dateMap = {};
+        series.forEach(pt => dateMap[pt.date] = pt.value);
+
+        const user = data.users.find(u => u.ticker === ticker);
+        const label = user ? `${user.name} ($${ticker})` : `$${ticker}`;
+        const color = isBenchmark
+            ? BENCHMARK_COLORS[ticker]
+            : COLORS[data.users.findIndex(u => u.ticker === ticker) % COLORS.length];
+
+        datasets.push({
+            label,
+            data: dates.map(d => dateMap[d] ?? null),
+            borderColor: color,
+            backgroundColor: color + '18',
+            borderWidth: isBenchmark ? 2.5 : 1.8,
+            borderDash: isBenchmark ? [6, 3] : [],
+            pointRadius: 0,
+            pointHitRadius: 10,
+            pointHoverRadius: 5,
+            tension: 0.3,
+            spanGaps: true,
+        });
+    });
+
+    // Save original styles for reset
+    ytdOriginalStyles = datasets.map(ds => ({
+        borderColor: ds.borderColor,
+        backgroundColor: ds.backgroundColor,
+        borderWidth: ds.borderWidth,
+        borderDash: ds.borderDash,
+    }));
+    ytdHighlightedIndex = -1;
+
+    ytdChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: { labels: dates, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'nearest', intersect: true, axis: 'xy' },
+            onClick: handleYTDClick,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { boxWidth: 12, padding: 12, font: { size: 11 } },
+                    onClick: function(e, legendItem, legend) {
+                        // When clicking a legend item, isolate that dataset
+                        highlightDataset(legendItem.datasetIndex);
+                    },
+                },
+                tooltip: {
+                    backgroundColor: '#1e293b',
+                    titleFont: { size: 12 },
+                    bodyFont: { size: 11 },
+                    callbacks: {
+                        label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y >= 0 ? '+' : ''}${ctx.parsed.y.toFixed(2)}%`,
+                    },
+                },
+            },
+            scales: {
+                x: {
+                    ticks: { maxTicksLimit: 10, font: { size: 10 }, color: '#94a3b8' },
+                    grid: { display: false },
+                },
+                y: {
+                    ticks: {
+                        font: { size: 10 },
+                        color: '#94a3b8',
+                        callback: v => (v >= 0 ? '+' : '') + v + '%',
+                    },
+                    grid: { color: '#f1f5f9' },
+                },
+            },
+        },
+    });
+}
+
+// Handle clicking on the chart canvas to isolate a line
+function handleYTDClick(event, elements) {
+    if (!ytdChartInstance) return;
+    if (elements.length === 0) {
+        // Clicked empty area — reset
+        resetYTDChart();
+        return;
+    }
+    const clickedIndex = elements[0].datasetIndex;
+    highlightDataset(clickedIndex);
+}
+
+// Highlight a single dataset, fade all others
+function highlightDataset(index) {
+    if (!ytdChartInstance) return;
+    const chart = ytdChartInstance;
+
+    if (ytdHighlightedIndex === index) {
+        // Clicking same one again — reset
+        resetYTDChart();
+        return;
+    }
+
+    ytdHighlightedIndex = index;
+    document.getElementById('ytd-reset-btn').classList.remove('hidden');
+
+    chart.data.datasets.forEach((ds, i) => {
+        if (i === index) {
+            // Restore original style + make bolder
+            ds.borderColor = ytdOriginalStyles[i].borderColor;
+            ds.backgroundColor = ytdOriginalStyles[i].borderColor + '28';
+            ds.borderWidth = 3.5;
+            ds.borderDash = [];
+            ds.pointRadius = 3;
+            ds.hidden = false;
+        } else {
+            // Fade out
+            ds.borderColor = ytdOriginalStyles[i].borderColor + '15';
+            ds.backgroundColor = 'transparent';
+            ds.borderWidth = 1;
+            ds.borderDash = ytdOriginalStyles[i].borderDash;
+            ds.pointRadius = 0;
+            ds.hidden = false;
+        }
+    });
+
+    chart.update();
+}
+
+// Reset all datasets to original styling
+function resetYTDChart() {
+    if (!ytdChartInstance) return;
+    const chart = ytdChartInstance;
+    ytdHighlightedIndex = -1;
+    document.getElementById('ytd-reset-btn').classList.add('hidden');
+
+    chart.data.datasets.forEach((ds, i) => {
+        ds.borderColor = ytdOriginalStyles[i].borderColor;
+        ds.backgroundColor = ytdOriginalStyles[i].backgroundColor;
+        ds.borderWidth = ytdOriginalStyles[i].borderWidth;
+        ds.borderDash = ytdOriginalStyles[i].borderDash;
+        ds.pointRadius = 0;
+        ds.hidden = false;
+    });
+
+    chart.update();
+}
+
+// ========================================================================
+// Balance Bar Chart
+// ========================================================================
+function renderBalanceChart(data) {
+    const ctx = document.getElementById('balance-chart').getContext('2d');
+    if (balanceChartInstance) balanceChartInstance.destroy();
+
+    const labels = data.users.map(u => u.name);
+    const values = data.users.map(u => u.balance);
+    const colors = data.users.map((u, i) => u.ytd_return >= 0 ? '#16a34a' : '#dc2626');
+
+    balanceChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Balance ($)',
+                data: values,
+                backgroundColor: colors.map(c => c + '22'),
+                borderColor: colors,
+                borderWidth: 1.5,
+                borderRadius: 6,
+            }],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#1e293b',
+                    callbacks: {
+                        label: ctx => `$${ctx.parsed.y.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                    },
+                },
+            },
+            scales: {
+                x: {
+                    ticks: { font: { size: 11 }, color: '#64748b' },
+                    grid: { display: false },
+                },
+                y: {
+                    ticks: {
+                        font: { size: 10 },
+                        color: '#94a3b8',
+                        callback: v => '$' + v.toLocaleString(),
+                    },
+                    grid: { color: '#f1f5f9' },
+                },
+            },
+        },
+    });
+}
+
+// ========================================================================
+// Benchmark Comparison — now a LINE chart over time
+// ========================================================================
+function renderBenchmarkChart(data) {
+    const ctx = document.getElementById('benchmark-chart').getContext('2d');
+    if (benchmarkChartInstance) benchmarkChartInstance.destroy();
+
+    // Collect all dates from benchmark histories + group avg histories
+    const allDates = new Set();
+    ['SPY', 'VT', 'VTI'].forEach(ticker => {
+        (data.histories[ticker] || []).forEach(pt => allDates.add(pt.date));
+    });
+    (data.group_avg_history || []).forEach(pt => allDates.add(pt.date));
+    (data.filtered_avg_history || []).forEach(pt => allDates.add(pt.date));
+    const dates = [...allDates].sort();
+
+    const makeDataMap = (series) => {
+        const m = {};
+        (series || []).forEach(pt => m[pt.date] = pt.value);
+        return m;
+    };
+
+    const groupMap = makeDataMap(data.group_avg_history);
+    const filteredMap = makeDataMap(data.filtered_avg_history);
+    const spyMap = makeDataMap(data.histories['SPY']);
+    const vtMap = makeDataMap(data.histories['VT']);
+    const vtiMap = makeDataMap(data.histories['VTI']);
+
+    const datasets = [
+        {
+            label: 'Group Average',
+            data: dates.map(d => groupMap[d] ?? null),
+            borderColor: '#8b5cf6',
+            backgroundColor: '#8b5cf618',
+            borderWidth: 2.5,
+            pointRadius: 0,
+            pointHitRadius: 8,
+            tension: 0.3,
+            spanGaps: true,
+        },
+        {
+            label: 'Filtered Avg (excl COIN, HOOD)',
+            data: dates.map(d => filteredMap[d] ?? null),
+            borderColor: '#ec4899',
+            backgroundColor: '#ec489918',
+            borderWidth: 2.5,
+            pointRadius: 0,
+            pointHitRadius: 8,
+            tension: 0.3,
+            spanGaps: true,
+        },
+        {
+            label: '$SPY',
+            data: dates.map(d => spyMap[d] ?? null),
+            borderColor: '#1e293b',
+            backgroundColor: '#1e293b18',
+            borderWidth: 2,
+            borderDash: [6, 3],
+            pointRadius: 0,
+            pointHitRadius: 8,
+            tension: 0.3,
+            spanGaps: true,
+        },
+        {
+            label: '$VT',
+            data: dates.map(d => vtMap[d] ?? null),
+            borderColor: '#64748b',
+            backgroundColor: '#64748b18',
+            borderWidth: 2,
+            borderDash: [6, 3],
+            pointRadius: 0,
+            pointHitRadius: 8,
+            tension: 0.3,
+            spanGaps: true,
+        },
+        {
+            label: '$VTI',
+            data: dates.map(d => vtiMap[d] ?? null),
+            borderColor: '#94a3b8',
+            backgroundColor: '#94a3b818',
+            borderWidth: 2,
+            borderDash: [6, 3],
+            pointRadius: 0,
+            pointHitRadius: 8,
+            tension: 0.3,
+            spanGaps: true,
+        },
+    ];
+
+    benchmarkChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: { labels: dates, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { boxWidth: 12, padding: 12, font: { size: 11 } },
+                },
+                tooltip: {
+                    backgroundColor: '#1e293b',
+                    titleFont: { size: 12 },
+                    bodyFont: { size: 11 },
+                    callbacks: {
+                        label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y >= 0 ? '+' : ''}${ctx.parsed.y.toFixed(2)}%`,
+                    },
+                },
+            },
+            scales: {
+                x: {
+                    ticks: { maxTicksLimit: 10, font: { size: 10 }, color: '#94a3b8' },
+                    grid: { display: false },
+                },
+                y: {
+                    ticks: {
+                        font: { size: 10 },
+                        color: '#94a3b8',
+                        callback: v => (v >= 0 ? '+' : '') + v + '%',
+                    },
+                    grid: { color: '#f1f5f9' },
+                },
+            },
+        },
+    });
+}
+
+// ========================================================================
+// Init
+// ========================================================================
+loadData();
+</script>
+</body>
+</html>
