@@ -4,6 +4,7 @@ import os
 import threading
 import time
 
+import csv
 import requests as http_requests
 from flask import Flask, jsonify, render_template
 
@@ -35,6 +36,7 @@ CACHE_TTL = 3600  # 1 hour
 
 FINNHUB_API_KEY = os.environ.get("FINNHUB_API_KEY", "")
 FINNHUB_BASE = "https://finnhub.io/api/v1"
+STOOQ_BASE = "https://stooq.com/q/d/l/"
 
 # ---------------------------------------------------------------------------
 # Cache
@@ -54,7 +56,7 @@ def _now_ts() -> int:
     return int(time.time())
 
 
-def _fetch_ticker(ticker: str, from_ts: int, to_ts: int) -> list[dict] | None:
+def _fetch_ticker_finnhub(ticker: str, from_ts: int, to_ts: int) -> list[dict] | None:
     """Fetch daily candles for a ticker from FinnHub (60 calls/min free)."""
     url = f"{FINNHUB_BASE}/stock/candle"
     params = {
@@ -68,6 +70,10 @@ def _fetch_ticker(ticker: str, from_ts: int, to_ts: int) -> list[dict] | None:
     try:
         resp = http_requests.get(url, params=params, timeout=15)
         data = resp.json()
+
+        if data.get("error"):
+            logger.warning(f"{ticker}: FinnHub error: {data.get('error')}")
+            return None
 
         if data.get("s") != "ok":
             logger.warning(f"{ticker}: no data (status={data.get('s')})")
@@ -93,10 +99,53 @@ def _fetch_ticker(ticker: str, from_ts: int, to_ts: int) -> list[dict] | None:
         return None
 
 
+def _fetch_ticker_stooq(ticker: str, start_date: str, end_date: str) -> list[dict] | None:
+    """Fetch daily candles for a ticker from Stooq (no API key required)."""
+    symbol = f"{ticker}.US".lower()
+    d1 = start_date.replace("-", "")
+    d2 = end_date.replace("-", "")
+    url = f"{STOOQ_BASE}?s={symbol}&d1={d1}&d2={d2}&i=d"
+
+    try:
+        resp = http_requests.get(url, timeout=20)
+        if resp.status_code != 200 or not resp.text:
+            logger.warning(f"{ticker}: Stooq returned no data")
+            return None
+
+        if "No data" in resp.text:
+            logger.warning(f"{ticker}: Stooq returned 'No data'")
+            return None
+
+        reader = csv.DictReader(resp.text.splitlines())
+        result = []
+        for row in reader:
+            date_str = row.get("Date")
+            close_str = row.get("Close")
+            if not date_str or not close_str or close_str in ("", "0", "0.0"):
+                continue
+            try:
+                result.append({"date": date_str, "close": float(close_str)})
+            except ValueError:
+                continue
+
+        if len(result) < 2:
+            logger.warning(f"{ticker}: Stooq insufficient data ({len(result)} points)")
+            return None
+
+        logger.info(f"{ticker}: Stooq got {len(result)} data points")
+        return result
+
+    except Exception as e:
+        logger.error(f"{ticker}: Stooq fetch failed: {e}")
+        return None
+
+
 def _build_data() -> dict:
     """Fetch YTD data for all stocks and benchmarks, compute metrics."""
     from_ts = _ytd_start_ts()
     to_ts = _now_ts()
+    start_date = datetime.date.fromtimestamp(from_ts).isoformat()
+    end_date = datetime.date.fromtimestamp(to_ts).isoformat()
 
     all_tickers = list(USERS.values()) + BENCHMARKS
     seen = set()
@@ -109,10 +158,21 @@ def _build_data() -> dict:
     # Fetch all tickers — FinnHub allows 60/min so no pausing needed
     histories: dict[str, list[dict]] = {}
     ytd_returns: dict[str, float] = {}
+    provider_used: dict[str, str] = {}
 
     for i, ticker in enumerate(unique_tickers):
         logger.info(f"Fetching {ticker} ({i+1}/{len(unique_tickers)})...")
-        raw = _fetch_ticker(ticker, from_ts, to_ts)
+
+        raw = None
+        if FINNHUB_API_KEY:
+            raw = _fetch_ticker_finnhub(ticker, from_ts, to_ts)
+            if raw:
+                provider_used[ticker] = "FinnHub"
+
+        if not raw:
+            raw = _fetch_ticker_stooq(ticker, start_date, end_date)
+            if raw:
+                provider_used[ticker] = "Stooq"
 
         if not raw or len(raw) < 2:
             histories[ticker] = []
@@ -190,6 +250,11 @@ def _build_data() -> dict:
         if vals_filtered:
             filtered_avg_history.append({"date": d, "value": round(sum(vals_filtered) / len(vals_filtered), 2)})
 
+    provider_label = "Unknown"
+    if provider_used:
+        providers = sorted(set(provider_used.values()))
+        provider_label = providers[0] if len(providers) == 1 else "Mixed (FinnHub + Stooq)"
+
     return {
         "users": users,
         "benchmarks": benchmarks,
@@ -199,6 +264,7 @@ def _build_data() -> dict:
         "filtered_avg_history": filtered_avg_history,
         "histories": histories,
         "updated_at": datetime.datetime.now().strftime("%b %d, %Y %I:%M %p"),
+        "data_provider": provider_label,
     }
 
 
@@ -246,6 +312,7 @@ def get_data() -> dict:
         "histories": {},
         "updated_at": "Loading data...",
         "_loading": True,
+        "data_provider": "Loading",
     }
 
 

@@ -141,7 +141,7 @@
 
     <!-- Footer -->
     <footer class="max-w-7xl mx-auto px-4 sm:px-6 py-6 text-center text-xs text-gray-400">
-        Data sourced from Twelve Data &middot; Refreshes every hour
+        Data sourced from <span id="data-provider">API</span> &middot; Refreshes every hour
     </footer>
 
 <script>
@@ -201,6 +201,9 @@ function render(data) {
     document.getElementById('loading').classList.add('hidden');
     document.getElementById('content').classList.remove('hidden');
     document.getElementById('updated-at').textContent = 'Updated ' + data.updated_at;
+    if (data.data_provider) {
+        document.getElementById('data-provider').textContent = data.data_provider;
+    }
 
     renderComparisonCards(data);
     renderLeaderboard(data);
