@@ -5,6 +5,7 @@ import threading
 import time
 
 import csv
+import json
 import requests as http_requests
 from flask import Flask, jsonify, render_template
 
@@ -37,6 +38,7 @@ CACHE_TTL = 3600  # 1 hour
 FINNHUB_API_KEY = os.environ.get("FINNHUB_API_KEY", "")
 FINNHUB_BASE = "https://finnhub.io/api/v1"
 STOOQ_BASE = "https://stooq.com/q/d/l/"
+CACHE_FILE = "/tmp/stock_cache.json"
 
 # ---------------------------------------------------------------------------
 # Cache
@@ -268,6 +270,34 @@ def _build_data() -> dict:
     }
 
 
+def _save_cache_to_disk(data: dict) -> None:
+    """Persist cache to disk for multi-worker consistency."""
+    try:
+        payload = {"_cache_ts": time.time(), "data": data}
+        tmp_path = f"{CACHE_FILE}.tmp"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f)
+        os.replace(tmp_path, CACHE_FILE)
+        logger.info("Cache written to disk")
+    except Exception as e:
+        logger.error(f"Failed to save cache to disk: {e}")
+
+
+def _load_cache_from_disk() -> tuple[dict | None, float]:
+    """Load cache from disk if present."""
+    try:
+        if not os.path.exists(CACHE_FILE):
+            return None, 0
+        with open(CACHE_FILE, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        data = payload.get("data")
+        ts = float(payload.get("_cache_ts", 0))
+        return data, ts
+    except Exception as e:
+        logger.error(f"Failed to load cache from disk: {e}")
+        return None, 0
+
+
 # ---------------------------------------------------------------------------
 # Background refresh — fetches data without blocking web requests
 # ---------------------------------------------------------------------------
@@ -283,6 +313,7 @@ def _refresh_cache():
         data = _build_data()
         _cache["data"] = data
         _cache["ts"] = time.time()
+        _save_cache_to_disk(data)
         logger.info("Background refresh: done!")
     except Exception as e:
         logger.error(f"Background refresh failed: {e}")
@@ -298,8 +329,16 @@ def _schedule_refresh_loop():
 
 
 def get_data() -> dict:
+    # First try memory
     if _cache["data"] is not None:
         return _cache["data"]
+
+    # Then try disk (useful if multiple workers are running)
+    disk_data, disk_ts = _load_cache_from_disk()
+    if disk_data is not None:
+        _cache["data"] = disk_data
+        _cache["ts"] = disk_ts
+        return disk_data
 
     if not _cache["loading"]:
         threading.Thread(target=_refresh_cache, daemon=True).start()
@@ -334,6 +373,20 @@ def api_data():
 def health():
     data = _cache["data"]
     if data is None:
+        # Try disk for a quick read
+        disk_data, _ = _load_cache_from_disk()
+        if disk_data is not None:
+            data = disk_data
+            _cache["data"] = disk_data
+            return jsonify({
+                "status": "ok",
+                "api_key_set": bool(FINNHUB_API_KEY),
+                "tickers_with_data": sum(1 for u in data["users"] if u["ytd_return"] != 0.0),
+                "total_tickers": len(data["users"]),
+                "updated_at": data["updated_at"],
+                "loading": _cache["loading"],
+                "data_provider": data.get("data_provider", "Unknown"),
+            })
         return jsonify({"status": "loading", "loading": _cache["loading"], "api_key_set": bool(FINNHUB_API_KEY)})
     has_data = any(u["ytd_return"] != 0.0 for u in data["users"])
     return jsonify({
@@ -343,6 +396,7 @@ def health():
         "total_tickers": len(data["users"]),
         "updated_at": data["updated_at"],
         "loading": _cache["loading"],
+        "data_provider": data.get("data_provider", "Unknown"),
     })
 
 
