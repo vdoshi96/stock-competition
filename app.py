@@ -35,8 +35,11 @@ CRYPTO_ADJACENT = {"COIN", "HOOD"}
 STARTING_BALANCE = 1000.0
 CACHE_TTL = 3600  # 1 hour
 
-FINNHUB_API_KEY = os.environ.get("FINNHUB_API_KEY", "")
-FINNHUB_BASE = "https://finnhub.io/api/v1"
+TWELVEDATA_API_KEY = os.environ.get("TWELVEDATA_API_KEY", "")
+TWELVEDATA_BASE = "https://api.twelvedata.com"
+TWELVEDATA_RATE_LIMIT = 8          # requests per minute on free tier
+TWELVEDATA_RATE_WINDOW = 62        # seconds to wait after hitting the limit
+
 STOOQ_BASE = "https://stooq.com/q/d/l/"
 CACHE_FILE = "/tmp/stock_cache.json"
 
@@ -47,62 +50,50 @@ _cache: dict = {"data": None, "ts": 0, "loading": False}
 _lock = threading.Lock()
 
 
-def _ytd_start_ts() -> int:
-    """Unix timestamp for Jan 1 of the current year."""
-    year = datetime.date.today().year
-    return int(datetime.datetime(year, 1, 1).timestamp())
+# ---------------------------------------------------------------------------
+# Data fetchers
+# ---------------------------------------------------------------------------
 
-
-def _now_ts() -> int:
-    """Current unix timestamp."""
-    return int(time.time())
-
-
-def _fetch_ticker_finnhub(ticker: str, from_ts: int, to_ts: int) -> list[dict] | None:
-    """Fetch daily candles for a ticker from FinnHub (60 calls/min free)."""
-    url = f"{FINNHUB_BASE}/stock/candle"
+def _fetch_ticker_twelvedata(ticker: str, start_date: str, end_date: str) -> list[dict] | None:
+    """Fetch daily candles from Twelve Data (8 calls/min free tier)."""
+    url = f"{TWELVEDATA_BASE}/time_series"
     params = {
         "symbol": ticker,
-        "resolution": "D",
-        "from": from_ts,
-        "to": to_ts,
-        "token": FINNHUB_API_KEY,
+        "interval": "1day",
+        "start_date": start_date,
+        "end_date": end_date,
+        "apikey": TWELVEDATA_API_KEY,
+        "order": "ASC",               # oldest first
     }
 
     try:
-        resp = http_requests.get(url, params=params, timeout=15)
+        resp = http_requests.get(url, params=params, timeout=20)
         data = resp.json()
 
-        if data.get("error"):
-            logger.warning(f"{ticker}: FinnHub error: {data.get('error')}")
+        if data.get("status") != "ok":
+            msg = data.get("message", "unknown error")
+            logger.warning(f"{ticker}: Twelve Data error — {msg}")
             return None
 
-        if data.get("s") != "ok":
-            logger.warning(f"{ticker}: no data (status={data.get('s')})")
-            return None
-
-        closes = data.get("c", [])
-        timestamps = data.get("t", [])
-
-        if not closes or not timestamps or len(closes) < 2:
-            logger.warning(f"{ticker}: insufficient data ({len(closes)} points)")
+        values = data.get("values", [])
+        if len(values) < 2:
+            logger.warning(f"{ticker}: Twelve Data insufficient data ({len(values)} points)")
             return None
 
         result = []
-        for ts, close in zip(timestamps, closes):
-            date_str = datetime.datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d")
-            result.append({"date": date_str, "close": float(close)})
+        for v in values:
+            result.append({"date": v["datetime"], "close": float(v["close"])})
 
-        logger.info(f"{ticker}: got {len(result)} data points")
+        logger.info(f"{ticker}: Twelve Data got {len(result)} points")
         return result
 
     except Exception as e:
-        logger.error(f"Failed to fetch {ticker}: {e}")
+        logger.error(f"{ticker}: Twelve Data fetch failed: {e}")
         return None
 
 
 def _fetch_ticker_stooq(ticker: str, start_date: str, end_date: str) -> list[dict] | None:
-    """Fetch daily candles for a ticker from Stooq (no API key required)."""
+    """Fetch daily candles from Stooq (no API key required)."""
     symbol = f"{ticker}.US".lower()
     d1 = start_date.replace("-", "")
     d2 = end_date.replace("-", "")
@@ -142,12 +133,15 @@ def _fetch_ticker_stooq(ticker: str, start_date: str, end_date: str) -> list[dic
         return None
 
 
+# ---------------------------------------------------------------------------
+# Build full dataset
+# ---------------------------------------------------------------------------
+
 def _build_data() -> dict:
     """Fetch YTD data for all stocks and benchmarks, compute metrics."""
-    from_ts = _ytd_start_ts()
-    to_ts = _now_ts()
-    start_date = datetime.date.fromtimestamp(from_ts).isoformat()
-    end_date = datetime.date.fromtimestamp(to_ts).isoformat()
+    year = datetime.date.today().year
+    start_date = f"{year}-01-01"
+    end_date = datetime.date.today().isoformat()
 
     all_tickers = list(USERS.values()) + BENCHMARKS
     seen = set()
@@ -157,29 +151,44 @@ def _build_data() -> dict:
             seen.add(t)
             unique_tickers.append(t)
 
-    # Fetch all tickers — FinnHub allows 60/min so no pausing needed
     histories: dict[str, list[dict]] = {}
     ytd_returns: dict[str, float] = {}
     provider_used: dict[str, str] = {}
+
+    twelvedata_calls = 0
 
     for i, ticker in enumerate(unique_tickers):
         logger.info(f"Fetching {ticker} ({i+1}/{len(unique_tickers)})...")
 
         raw = None
-        if FINNHUB_API_KEY:
-            raw = _fetch_ticker_finnhub(ticker, from_ts, to_ts)
-            if raw:
-                provider_used[ticker] = "FinnHub"
 
+        # --- Try Twelve Data first (if key is set) --------------------------
+        if TWELVEDATA_API_KEY:
+            # Respect 8 calls/minute rate limit
+            if twelvedata_calls > 0 and twelvedata_calls % TWELVEDATA_RATE_LIMIT == 0:
+                logger.info(
+                    f"Rate limit reached ({twelvedata_calls} calls). "
+                    f"Pausing {TWELVEDATA_RATE_WINDOW}s..."
+                )
+                time.sleep(TWELVEDATA_RATE_WINDOW)
+
+            raw = _fetch_ticker_twelvedata(ticker, start_date, end_date)
+            twelvedata_calls += 1
+
+            if raw:
+                provider_used[ticker] = "Twelve Data"
+
+        # --- Fallback to Stooq -----------------------------------------------
         if not raw:
+            logger.info(f"{ticker}: falling back to Stooq...")
             raw = _fetch_ticker_stooq(ticker, start_date, end_date)
             if raw:
                 provider_used[ticker] = "Stooq"
 
+        # --- Process result ---------------------------------------------------
         if not raw or len(raw) < 2:
             histories[ticker] = []
             ytd_returns[ticker] = 0.0
-            time.sleep(0.3)
             continue
 
         first_close = raw[0]["close"]
@@ -194,10 +203,10 @@ def _build_data() -> dict:
         histories[ticker] = series
         logger.info(f"{ticker}: YTD {ytd_returns[ticker]}%")
 
-        # Small courtesy delay (60/min limit is generous, this is just polite)
+        # Short courtesy delay between requests
         time.sleep(0.3)
 
-    # Per-user data
+    # -- Per-user data -------------------------------------------------------
     users = []
     for name, ticker in USERS.items():
         ret = ytd_returns.get(ticker, 0.0)
@@ -212,7 +221,7 @@ def _build_data() -> dict:
 
     users.sort(key=lambda u: u["ytd_return"], reverse=True)
 
-    # Group averages
+    # -- Group averages ------------------------------------------------------
     all_returns = [u["ytd_return"] for u in users]
     filtered_returns = [u["ytd_return"] for u in users if not u["crypto_adjacent"]]
 
@@ -229,7 +238,7 @@ def _build_data() -> dict:
         balance = round(STARTING_BALANCE * (1 + ret / 100), 2)
         benchmarks.append({"ticker": ticker, "ytd_return": ret, "balance": balance})
 
-    # Daily group-average time series
+    # -- Daily group-average time series ------------------------------------
     all_dates = set()
     for ticker in list(USERS.values()):
         for pt in histories.get(ticker, []):
@@ -248,14 +257,19 @@ def _build_data() -> dict:
                 if ticker not in CRYPTO_ADJACENT:
                     vals_filtered.append(date_map[d])
         if vals_all:
-            group_avg_history.append({"date": d, "value": round(sum(vals_all) / len(vals_all), 2)})
+            group_avg_history.append(
+                {"date": d, "value": round(sum(vals_all) / len(vals_all), 2)}
+            )
         if vals_filtered:
-            filtered_avg_history.append({"date": d, "value": round(sum(vals_filtered) / len(vals_filtered), 2)})
+            filtered_avg_history.append(
+                {"date": d, "value": round(sum(vals_filtered) / len(vals_filtered), 2)}
+            )
 
+    # Provider label
     provider_label = "Unknown"
     if provider_used:
         providers = sorted(set(provider_used.values()))
-        provider_label = providers[0] if len(providers) == 1 else "Mixed (FinnHub + Stooq)"
+        provider_label = " + ".join(providers)
 
     return {
         "users": users,
@@ -269,6 +283,10 @@ def _build_data() -> dict:
         "data_provider": provider_label,
     }
 
+
+# ---------------------------------------------------------------------------
+# Disk cache helpers
+# ---------------------------------------------------------------------------
 
 def _save_cache_to_disk(data: dict) -> None:
     """Persist cache to disk for multi-worker consistency."""
@@ -344,7 +362,13 @@ def get_data() -> dict:
         threading.Thread(target=_refresh_cache, daemon=True).start()
 
     return {
-        "users": [{"name": n, "ticker": t, "ytd_return": 0, "balance": 1000, "crypto_adjacent": t in CRYPTO_ADJACENT} for n, t in USERS.items()],
+        "users": [
+            {
+                "name": n, "ticker": t, "ytd_return": 0, "balance": 1000,
+                "crypto_adjacent": t in CRYPTO_ADJACENT,
+            }
+            for n, t in USERS.items()
+        ],
         "benchmarks": [{"ticker": t, "ytd_return": 0, "balance": 1000} for t in BENCHMARKS],
         "group_avg": 0, "filtered_avg": 0,
         "group_avg_history": [], "filtered_avg_history": [],
@@ -373,31 +397,49 @@ def api_data():
 def health():
     data = _cache["data"]
     if data is None:
-        # Try disk for a quick read
         disk_data, _ = _load_cache_from_disk()
         if disk_data is not None:
             data = disk_data
             _cache["data"] = disk_data
             return jsonify({
                 "status": "ok",
-                "api_key_set": bool(FINNHUB_API_KEY),
+                "api_key_set": bool(TWELVEDATA_API_KEY),
                 "tickers_with_data": sum(1 for u in data["users"] if u["ytd_return"] != 0.0),
                 "total_tickers": len(data["users"]),
                 "updated_at": data["updated_at"],
                 "loading": _cache["loading"],
                 "data_provider": data.get("data_provider", "Unknown"),
             })
-        return jsonify({"status": "loading", "loading": _cache["loading"], "api_key_set": bool(FINNHUB_API_KEY)})
+        return jsonify({
+            "status": "loading",
+            "loading": _cache["loading"],
+            "api_key_set": bool(TWELVEDATA_API_KEY),
+        })
     has_data = any(u["ytd_return"] != 0.0 for u in data["users"])
     return jsonify({
         "status": "ok" if has_data else "no_data",
-        "api_key_set": bool(FINNHUB_API_KEY),
+        "api_key_set": bool(TWELVEDATA_API_KEY),
         "tickers_with_data": sum(1 for u in data["users"] if u["ytd_return"] != 0.0),
         "total_tickers": len(data["users"]),
         "updated_at": data["updated_at"],
         "loading": _cache["loading"],
         "data_provider": data.get("data_provider", "Unknown"),
     })
+
+
+@app.route("/api/clear-cache")
+def clear_cache():
+    """Force a fresh data fetch (clears memory + disk cache)."""
+    _cache["data"] = None
+    _cache["ts"] = 0
+    try:
+        if os.path.exists(CACHE_FILE):
+            os.remove(CACHE_FILE)
+    except Exception:
+        pass
+    if not _cache["loading"]:
+        threading.Thread(target=_refresh_cache, daemon=True).start()
+    return jsonify({"status": "cache_cleared", "refreshing": True})
 
 
 # Start background refresh on import
