@@ -32,13 +32,24 @@ USERS = {
 BENCHMARKS = ["SPY", "VT", "VTI"]
 CRYPTO_ADJACENT = {"COIN", "HOOD"}
 
+# TradingView needs exchange-qualified symbols
+TV_SYMBOLS = {
+    "ZETA": "NYSE:ZETA",
+    "ASTS": "NASDAQ:ASTS",
+    "GLDM": "AMEX:GLDM",
+    "COIN": "NASDAQ:COIN",
+    "MU": "NASDAQ:MU",
+    "HOOD": "NASDAQ:HOOD",
+    "AMZN": "NASDAQ:AMZN",
+    "SOFI": "NASDAQ:SOFI",
+    "GME": "NYSE:GME",
+    "SPY": "AMEX:SPY",
+    "VT": "AMEX:VT",
+    "VTI": "AMEX:VTI",
+}
+
 STARTING_BALANCE = 1000.0
 CACHE_TTL = 3600  # 1 hour
-
-TWELVEDATA_API_KEY = os.environ.get("TWELVEDATA_API_KEY", "")
-TWELVEDATA_BASE = "https://api.twelvedata.com"
-TWELVEDATA_RATE_LIMIT = 8          # requests per minute on free tier
-TWELVEDATA_RATE_WINDOW = 62        # seconds to wait after hitting the limit
 
 STOOQ_BASE = "https://stooq.com/q/d/l/"
 CACHE_FILE = "/tmp/stock_cache.json"
@@ -54,46 +65,45 @@ _lock = threading.Lock()
 # Data fetchers
 # ---------------------------------------------------------------------------
 
-def _fetch_ticker_twelvedata(ticker: str, start_date: str, end_date: str) -> list[dict] | None:
-    """Fetch daily candles from Twelve Data (8 calls/min free tier)."""
-    url = f"{TWELVEDATA_BASE}/time_series"
-    params = {
-        "symbol": ticker,
-        "interval": "1day",
-        "start_date": start_date,
-        "end_date": end_date,
-        "apikey": TWELVEDATA_API_KEY,
-        "order": "ASC",               # oldest first
+def _fetch_tradingview_batch(tickers: list[str]) -> dict[str, dict]:
+    """Fetch current close + YTD% for all tickers in ONE TradingView API call.
+
+    Returns {ticker: {"close": float, "ytd_pct": float}} e.g. {"AAPL": {"close": 278, "ytd_pct": 2.15}}
+    """
+    tv_tickers = [TV_SYMBOLS[t] for t in tickers if t in TV_SYMBOLS]
+    if not tv_tickers:
+        return {}
+
+    url = "https://scanner.tradingview.com/america/scan"
+    payload = {
+        "symbols": {"tickers": tv_tickers},
+        "columns": ["close", "Perf.YTD"],
     }
 
     try:
-        resp = http_requests.get(url, params=params, timeout=20)
+        resp = http_requests.post(url, json=payload, timeout=20)
         data = resp.json()
 
-        if data.get("status") != "ok":
-            msg = data.get("message", "unknown error")
-            logger.warning(f"{ticker}: Twelve Data error — {msg}")
-            return None
+        result: dict[str, dict] = {}
+        for row in data.get("data", []):
+            # row["s"] looks like "NYSE:ZETA"
+            qualified = row["s"]
+            ticker = qualified.split(":")[1]
+            close_val, ytd_pct = row["d"]
+            if close_val is not None and ytd_pct is not None:
+                result[ticker] = {"close": float(close_val), "ytd_pct": float(ytd_pct)}
+                logger.info(f"{ticker}: TradingView  close={close_val:.2f}  YTD={ytd_pct:.2f}%")
 
-        values = data.get("values", [])
-        if len(values) < 2:
-            logger.warning(f"{ticker}: Twelve Data insufficient data ({len(values)} points)")
-            return None
-
-        result = []
-        for v in values:
-            result.append({"date": v["datetime"], "close": float(v["close"])})
-
-        logger.info(f"{ticker}: Twelve Data got {len(result)} points")
+        logger.info(f"TradingView: fetched {len(result)}/{len(tv_tickers)} tickers")
         return result
 
     except Exception as e:
-        logger.error(f"{ticker}: Twelve Data fetch failed: {e}")
-        return None
+        logger.error(f"TradingView batch fetch failed: {e}")
+        return {}
 
 
 def _fetch_ticker_stooq(ticker: str, start_date: str, end_date: str) -> list[dict] | None:
-    """Fetch daily candles from Stooq (no API key required)."""
+    """Fetch daily candles from Stooq (no API key, used for chart time-series)."""
     symbol = f"{ticker}.US".lower()
     d1 = start_date.replace("-", "")
     d2 = end_date.replace("-", "")
@@ -125,7 +135,7 @@ def _fetch_ticker_stooq(ticker: str, start_date: str, end_date: str) -> list[dic
             logger.warning(f"{ticker}: Stooq insufficient data ({len(result)} points)")
             return None
 
-        logger.info(f"{ticker}: Stooq got {len(result)} data points")
+        logger.info(f"{ticker}: Stooq got {len(result)} daily points")
         return result
 
     except Exception as e:
@@ -138,7 +148,13 @@ def _fetch_ticker_stooq(ticker: str, start_date: str, end_date: str) -> list[dic
 # ---------------------------------------------------------------------------
 
 def _build_data() -> dict:
-    """Fetch YTD data for all stocks and benchmarks, compute metrics."""
+    """Fetch YTD data for all stocks and benchmarks, compute metrics.
+
+    Strategy:
+    - TradingView Scanner  →  accurate YTD % and current close (1 batch call)
+    - Stooq                →  daily time-series for line charts
+    - Chart series are scaled so the final point matches TradingView's YTD
+    """
     year = datetime.date.today().year
     start_date = f"{year}-01-01"
     end_date = datetime.date.today().isoformat()
@@ -151,60 +167,59 @@ def _build_data() -> dict:
             seen.add(t)
             unique_tickers.append(t)
 
+    # --- 1) TradingView: get accurate YTD numbers in ONE call ----------------
+    tv_data = _fetch_tradingview_batch(unique_tickers)
+
+    # --- 2) Stooq: get daily time-series for each ticker ---------------------
     histories: dict[str, list[dict]] = {}
     ytd_returns: dict[str, float] = {}
-    provider_used: dict[str, str] = {}
+    provider_parts: list[str] = []
 
-    twelvedata_calls = 0
+    if tv_data:
+        provider_parts.append("TradingView")
 
     for i, ticker in enumerate(unique_tickers):
-        logger.info(f"Fetching {ticker} ({i+1}/{len(unique_tickers)})...")
+        logger.info(f"Fetching chart data for {ticker} ({i+1}/{len(unique_tickers)})...")
 
-        raw = None
+        tv = tv_data.get(ticker)
+        stooq_raw = _fetch_ticker_stooq(ticker, start_date, end_date)
 
-        # --- Try Twelve Data first (if key is set) --------------------------
-        if TWELVEDATA_API_KEY:
-            # Respect 8 calls/minute rate limit
-            if twelvedata_calls > 0 and twelvedata_calls % TWELVEDATA_RATE_LIMIT == 0:
-                logger.info(
-                    f"Rate limit reached ({twelvedata_calls} calls). "
-                    f"Pausing {TWELVEDATA_RATE_WINDOW}s..."
-                )
-                time.sleep(TWELVEDATA_RATE_WINDOW)
-
-            raw = _fetch_ticker_twelvedata(ticker, start_date, end_date)
-            twelvedata_calls += 1
-
-            if raw:
-                provider_used[ticker] = "Twelve Data"
-
-        # --- Fallback to Stooq -----------------------------------------------
-        if not raw:
-            logger.info(f"{ticker}: falling back to Stooq...")
-            raw = _fetch_ticker_stooq(ticker, start_date, end_date)
-            if raw:
-                provider_used[ticker] = "Stooq"
-
-        # --- Process result ---------------------------------------------------
-        if not raw or len(raw) < 2:
-            histories[ticker] = []
+        # Determine YTD return
+        if tv:
+            ytd_returns[ticker] = round(tv["ytd_pct"], 2)
+        elif stooq_raw and len(stooq_raw) >= 2:
+            first_c = stooq_raw[0]["close"]
+            last_c = stooq_raw[-1]["close"]
+            ytd_returns[ticker] = round(((last_c - first_c) / first_c) * 100, 2)
+            if "Stooq" not in provider_parts:
+                provider_parts.append("Stooq")
+        else:
             ytd_returns[ticker] = 0.0
-            continue
 
-        first_close = raw[0]["close"]
-        last_close = raw[-1]["close"]
-        ytd_pct = ((last_close - first_close) / first_close) * 100
-        ytd_returns[ticker] = round(ytd_pct, 2)
+        # Build time-series for charts
+        if stooq_raw and len(stooq_raw) >= 2:
+            first_close = stooq_raw[0]["close"]
+            stooq_final_return = ((stooq_raw[-1]["close"] - first_close) / first_close) * 100
 
-        series = []
-        for pt in raw:
-            cum_return = ((pt["close"] - first_close) / first_close) * 100
-            series.append({"date": pt["date"], "value": round(cum_return, 2)})
-        histories[ticker] = series
-        logger.info(f"{ticker}: YTD {ytd_returns[ticker]}%")
+            # Scale factor: normalize chart endpoint to TradingView's accurate YTD
+            tv_ytd = tv["ytd_pct"] if tv else stooq_final_return
+            if abs(stooq_final_return) > 0.01:
+                scale = tv_ytd / stooq_final_return
+            else:
+                scale = 1.0
 
-        # Short courtesy delay between requests
+            series = []
+            for pt in stooq_raw:
+                raw_return = ((pt["close"] - first_close) / first_close) * 100
+                series.append({"date": pt["date"], "value": round(raw_return * scale, 2)})
+            histories[ticker] = series
+        else:
+            histories[ticker] = []
+
+        # Small delay between Stooq requests
         time.sleep(0.3)
+
+    logger.info(f"YTD returns: {ytd_returns}")
 
     # -- Per-user data -------------------------------------------------------
     users = []
@@ -265,11 +280,7 @@ def _build_data() -> dict:
                 {"date": d, "value": round(sum(vals_filtered) / len(vals_filtered), 2)}
             )
 
-    # Provider label
-    provider_label = "Unknown"
-    if provider_used:
-        providers = sorted(set(provider_used.values()))
-        provider_label = " + ".join(providers)
+    provider_label = " + ".join(provider_parts) if provider_parts else "Unknown"
 
     return {
         "users": users,
@@ -403,22 +414,16 @@ def health():
             _cache["data"] = disk_data
             return jsonify({
                 "status": "ok",
-                "api_key_set": bool(TWELVEDATA_API_KEY),
                 "tickers_with_data": sum(1 for u in data["users"] if u["ytd_return"] != 0.0),
                 "total_tickers": len(data["users"]),
                 "updated_at": data["updated_at"],
                 "loading": _cache["loading"],
                 "data_provider": data.get("data_provider", "Unknown"),
             })
-        return jsonify({
-            "status": "loading",
-            "loading": _cache["loading"],
-            "api_key_set": bool(TWELVEDATA_API_KEY),
-        })
+        return jsonify({"status": "loading", "loading": _cache["loading"]})
     has_data = any(u["ytd_return"] != 0.0 for u in data["users"])
     return jsonify({
         "status": "ok" if has_data else "no_data",
-        "api_key_set": bool(TWELVEDATA_API_KEY),
         "tickers_with_data": sum(1 for u in data["users"] if u["ytd_return"] != 0.0),
         "total_tickers": len(data["users"]),
         "updated_at": data["updated_at"],
