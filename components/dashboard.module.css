@@ -1,0 +1,213 @@
+.page {
+  min-height: 100vh;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 24px;
+  border-bottom: 1px solid #e2e8f0;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(8px);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.brand p {
+  margin: 2px 0 0;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.updatedAt {
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
+.githubButton,
+.refreshButton,
+.retryButton {
+  border: 1px solid #cbd5e1;
+  background: white;
+  color: #0f172a;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.refreshButton,
+.retryButton {
+  background: #0f172a;
+  color: white;
+  border-color: #0f172a;
+}
+
+.loadingCard,
+.panel,
+.metricCard {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+}
+
+.loadingCard {
+  max-width: 960px;
+  margin: 28px auto;
+  padding: 26px;
+}
+
+.loadingCard h2 {
+  margin: 0 0 8px;
+}
+
+.loadingCard p {
+  margin: 0;
+  color: #64748b;
+}
+
+.loadingCard .retryButton {
+  margin-top: 14px;
+}
+
+.main {
+  max-width: 1280px;
+  margin: 22px auto;
+  padding: 0 20px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+}
+
+.metricCard {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.metricCard span {
+  color: #64748b;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.metricCard strong {
+  font-size: 1.4rem;
+}
+
+.metricCard small {
+  color: #64748b;
+}
+
+.panel {
+  padding: 16px;
+}
+
+.panel h2 {
+  margin: 0 0 12px;
+}
+
+.chartGrid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+.chartGrid .panel,
+.panel:has(canvas) {
+  min-height: 360px;
+}
+
+.panel table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.panel th,
+.panel td {
+  text-align: left;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 10px 8px;
+  font-size: 0.9rem;
+}
+
+.panel th {
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+.badge {
+  display: inline-block;
+  margin-left: 6px;
+  border-radius: 999px;
+  padding: 2px 6px;
+  font-size: 0.65rem;
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.positive {
+  color: #16a34a;
+}
+
+.negative {
+  color: #dc2626;
+}
+
+.footer {
+  text-align: center;
+  color: #64748b;
+  font-size: 0.8rem;
+  padding: 10px 0 20px;
+}
+
+@media (max-width: 760px) {
+  .header {
+    padding: 14px;
+  }
+
+  .updatedAt {
+    display: none;
+  }
+
+  .main {
+    padding: 0 12px 20px;
+  }
+}
