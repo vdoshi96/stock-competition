@@ -1,6 +1,28 @@
 :root {
-  color-scheme: light;
+  color-scheme: light dark;
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --bg-start: #eef2ff;
+  --bg-end: #f8fafc;
+  --text-main: #0f172a;
+  --text-muted: #64748b;
+  --surface: rgba(255, 255, 255, 0.92);
+  --surface-border: #e2e8f0;
+  --surface-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+  --header-bg: rgba(255, 255, 255, 0.9);
+  --header-border: #e2e8f0;
+  --button-bg: #0f172a;
+  --button-text: #ffffff;
+  --button-border: #0f172a;
+  --button-secondary-bg: #ffffff;
+  --button-secondary-text: #0f172a;
+  --button-secondary-border: #cbd5e1;
+  --table-head-bg: #f8fafc;
+  --badge-bg: #fef3c7;
+  --badge-text: #92400e;
+  --positive: #16a34a;
+  --negative: #dc2626;
+  --chart-text: #334155;
+  --chart-grid: #e2e8f0;
 }
 
 * {
@@ -9,10 +31,37 @@
 
 body {
   margin: 0;
-  background: radial-gradient(circle at top left, #eef2ff, #f8fafc 40%);
-  color: #0f172a;
+  background: radial-gradient(circle at top left, var(--bg-start), var(--bg-end) 40%);
+  color: var(--text-main);
 }
 
 a {
   color: inherit;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-start: #0b1220;
+    --bg-end: #050a14;
+    --text-main: #e2e8f0;
+    --text-muted: #94a3b8;
+    --surface: rgba(15, 23, 42, 0.85);
+    --surface-border: #1e293b;
+    --surface-shadow: 0 10px 24px rgba(2, 6, 23, 0.5);
+    --header-bg: rgba(2, 6, 23, 0.8);
+    --header-border: #1e293b;
+    --button-bg: #2563eb;
+    --button-text: #ffffff;
+    --button-border: #2563eb;
+    --button-secondary-bg: #0f172a;
+    --button-secondary-text: #e2e8f0;
+    --button-secondary-border: #334155;
+    --table-head-bg: #0f172a;
+    --badge-bg: #3f2f17;
+    --badge-text: #fcd34d;
+    --positive: #4ade80;
+    --negative: #f87171;
+    --chart-text: #cbd5e1;
+    --chart-grid: #1e293b;
+  }
 }

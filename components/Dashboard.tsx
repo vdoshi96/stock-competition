@@ -27,6 +27,18 @@ const MAX_AUTO_RETRY_MS = 420000;
 const MAX_RETRY_DELAY_MS = 60000;
 
 type LoadState = "loading" | "ready" | "error";
+type ChartTheme = { text: string; grid: string };
+
+function readChartTheme(): ChartTheme {
+  if (typeof window === "undefined") {
+    return { text: "#334155", grid: "#e2e8f0" };
+  }
+  const styles = getComputedStyle(document.documentElement);
+  return {
+    text: styles.getPropertyValue("--chart-text").trim() || "#334155",
+    grid: styles.getPropertyValue("--chart-grid").trim() || "#e2e8f0",
+  };
+}
 
 function uniqueSortedDates(seriesMap: Record<string, SeriesPoint[]>, only?: string[]) {
   const dates = new Set<string>();
@@ -46,6 +58,7 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
   const [snapshot, setSnapshot] = useState<SnapshotResponse | null>(null);
   const [message, setMessage] = useState("Fetching latest stock data...");
   const [subtitle, setSubtitle] = useState("Preparing market snapshots and chart histories.");
+  const [chartTheme, setChartTheme] = useState<ChartTheme>({ text: "#334155", grid: "#e2e8f0" });
   const retryCount = useRef(0);
   const startedAt = useRef<number | null>(null);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -81,9 +94,7 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
         const delay = Math.min(10000 + retryCount.current * 5000, MAX_RETRY_DELAY_MS);
         setState("loading");
         setMessage("Building initial cache...");
-        setSubtitle(
-          `Alpha Vantage free-tier limits can slow first load. Auto-retrying in ${Math.round(delay / 1000)} seconds.`
-        );
+        setSubtitle(`Auto-retrying in ${Math.round(delay / 1000)} seconds.`);
         retryTimer.current = setTimeout(() => void fetchSnapshot(false), delay);
         return;
       }
@@ -105,6 +116,18 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
     void fetchSnapshot(false);
     return () => clearRetryTimer();
   }, [fetchSnapshot]);
+
+  useEffect(() => {
+    const applyTheme = () => {
+      const theme = readChartTheme();
+      ChartJS.defaults.color = theme.text;
+      setChartTheme(theme);
+    };
+    applyTheme();
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    media.addEventListener("change", applyTheme);
+    return () => media.removeEventListener("change", applyTheme);
+  }, []);
 
   const charts = useMemo(() => {
     if (!snapshot) return null;
@@ -285,7 +308,13 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: { legend: { position: "bottom" } },
-                    scales: { y: { ticks: { callback: (v) => `${Number(v) >= 0 ? "+" : ""}${v}%` } } },
+                    scales: {
+                      x: { ticks: { color: chartTheme.text }, grid: { color: chartTheme.grid } },
+                      y: {
+                        ticks: { color: chartTheme.text, callback: (v) => `${Number(v) >= 0 ? "+" : ""}${v}%` },
+                        grid: { color: chartTheme.grid },
+                      },
+                    },
                   }}
                 />
               </div>
@@ -295,7 +324,15 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
               <div className={styles.chartFrame}>
                 <Bar
                   data={charts.balances}
-                  options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                      x: { ticks: { color: chartTheme.text }, grid: { color: chartTheme.grid } },
+                      y: { ticks: { color: chartTheme.text }, grid: { color: chartTheme.grid } },
+                    },
+                  }}
                 />
               </div>
             </article>
@@ -310,7 +347,13 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
                   responsive: true,
                   maintainAspectRatio: false,
                   plugins: { legend: { position: "bottom" } },
-                  scales: { y: { ticks: { callback: (v) => `${Number(v) >= 0 ? "+" : ""}${v}%` } } },
+                  scales: {
+                    x: { ticks: { color: chartTheme.text }, grid: { color: chartTheme.grid } },
+                    y: {
+                      ticks: { color: chartTheme.text, callback: (v) => `${Number(v) >= 0 ? "+" : ""}${v}%` },
+                      grid: { color: chartTheme.grid },
+                    },
+                  },
                 }}
               />
             </div>

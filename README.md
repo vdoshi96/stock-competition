@@ -6,7 +6,7 @@ Ground-up rebuild of the stock competition tracker as a Next.js app with Vercel 
 
 - Removes the old Flask template monolith.
 - Uses a typed server-side data pipeline.
-- Adds bounded retries/backoff and concurrency limits for Alpha Vantage.
+- Uses a locked baseline-price model plus fast Yahoo quotes for live updates.
 - Adds snapshot cache with stale-while-revalidate semantics.
 - Replaces unbounded client polling with capped backoff + manual retry.
 
@@ -21,11 +21,11 @@ Ground-up rebuild of the stock competition tracker as a Next.js app with Vercel 
 ## Local setup
 
 1. Copy `.env.example` to `.env.local`.
-2. Set `ALPHA_VANTAGE_API_KEY`.
-3. Install and run:
+2. Install and run:
 
 ```bash
 npm install
+npm run baseline:generate
 npm run dev
 ```
 
@@ -41,6 +41,5 @@ npm run dev
 - Framework preset: Next.js
 - Build command: `npm run build`
 - Output: default Next.js output
-- Required env vars:
-  - `ALPHA_VANTAGE_API_KEY`
+- Optional env vars:
   - `NEXT_PUBLIC_GITHUB_REPO_URL` (optional)

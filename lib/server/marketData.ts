@@ -1,152 +1,116 @@
 import pLimit from "p-limit";
+import YahooFinance from "yahoo-finance2";
 
-import {
-  ALPHA_BASE_URL,
-  ALPHA_MAX_CONCURRENCY,
-  ALPHA_MAX_RETRIES,
-  ALPHA_MIN_REQUEST_INTERVAL_MS,
-  ALPHA_TIMEOUT_MS,
-} from "@/lib/server/constants";
+import { YAHOO_MAX_CONCURRENCY, YAHOO_MAX_RETRIES } from "@/lib/server/constants";
 import type { PricePoint } from "@/lib/types";
-
-type AlphaDailyResponse = {
-  "Time Series (Daily)"?: Record<
-    string,
-    {
-      "4. close"?: string;
-      "5. adjusted close"?: string;
-    }
-  >;
-  Note?: string;
-  Information?: string;
-  "Error Message"?: string;
-};
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function getApiKey(): string {
-  const key = process.env.ALPHA_VANTAGE_API_KEY;
-  if (!key) {
-    throw new Error("ALPHA_VANTAGE_API_KEY is not configured");
-  }
-  return key;
+const yahooFinance = new YahooFinance();
+
+function toIsoDate(value: Date): string {
+  return value.toISOString().slice(0, 10);
 }
 
-async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, {
-      cache: "no-store",
-      signal: controller.signal,
-      headers: {
-        Accept: "application/json",
-      },
+function parseHistorical(rows: unknown[]): PricePoint[] {
+  const parsed: PricePoint[] = [];
+  for (const row of rows as Array<{ date?: Date; close?: number }>) {
+    if (!row?.date || !row?.close || !Number.isFinite(row.close)) {
+      continue;
+    }
+    parsed.push({
+      date: toIsoDate(row.date),
+      close: Number(row.close),
     });
-  } finally {
-    clearTimeout(timer);
   }
+  parsed.sort((a, b) => a.date.localeCompare(b.date));
+  return parsed;
 }
 
-function parseDailyPoints(payload: AlphaDailyResponse, year: number): PricePoint[] {
-  const series = payload["Time Series (Daily)"];
-  if (!series) {
-    return [];
+function pickLatestQuotePrice(quote: Record<string, unknown> | null): number | null {
+  if (!quote) {
+    return null;
   }
-
-  const start = `${year}-01-01`;
-  const points: PricePoint[] = [];
-  for (const [date, row] of Object.entries(series)) {
-    if (date < start) {
-      continue;
+  const candidates = [
+    quote.regularMarketPrice,
+    quote.postMarketPrice,
+    quote.preMarketPrice,
+    quote.currentPrice,
+    quote.previousClose,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "number" && Number.isFinite(candidate) && candidate > 0) {
+      return candidate;
     }
-    const rawClose = row["5. adjusted close"] ?? row["4. close"];
-    if (!rawClose) {
-      continue;
-    }
-    const close = Number(rawClose);
-    if (!Number.isFinite(close) || close <= 0) {
-      continue;
-    }
-    points.push({ date, close });
   }
-
-  points.sort((a, b) => a.date.localeCompare(b.date));
-  return points;
+  return null;
 }
 
-let lastAlphaRequestStartedAt = 0;
+async function fetchTickerDataWithRetry(
+  ticker: string,
+  year: number
+): Promise<{ history: PricePoint[] | null; latest: number | null }> {
+  const period1 = `${year}-01-01`;
+  const period2 = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-async function waitForAlphaRateWindow() {
-  const now = Date.now();
-  const elapsed = now - lastAlphaRequestStartedAt;
-  const waitMs = Math.max(0, ALPHA_MIN_REQUEST_INTERVAL_MS - elapsed);
-  if (waitMs > 0) {
-    await sleep(waitMs);
-  }
-  lastAlphaRequestStartedAt = Date.now();
-}
-
-export async function fetchTickerDailySeries(ticker: string, year: number): Promise<PricePoint[] | null> {
-  const apiKey = getApiKey();
-  const url =
-    `${ALPHA_BASE_URL}?function=TIME_SERIES_DAILY_ADJUSTED&symbol=${encodeURIComponent(
-      ticker
-    )}&outputsize=compact&apikey=${encodeURIComponent(apiKey)}`;
-
-  for (let attempt = 1; attempt <= ALPHA_MAX_RETRIES; attempt += 1) {
+  for (let attempt = 1; attempt <= YAHOO_MAX_RETRIES; attempt += 1) {
     try {
-      await waitForAlphaRateWindow();
-      const response = await fetchWithTimeout(url, ALPHA_TIMEOUT_MS);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+      const [historyRows, quote] = await Promise.all([
+        yahooFinance.historical(ticker, {
+          period1,
+          period2,
+          interval: "1d",
+        }),
+        yahooFinance.quote(ticker),
+      ]);
+
+      const history = parseHistorical(historyRows as unknown[]);
+      const latest = pickLatestQuotePrice(quote as Record<string, unknown>);
+
+      if (history.length < 1 && latest === null) {
+        throw new Error("No valid Yahoo historical or quote data");
       }
 
-      const payload = (await response.json()) as AlphaDailyResponse;
-      if (payload["Error Message"]) {
-        throw new Error(payload["Error Message"]);
-      }
-      if (payload.Note || payload.Information) {
-        const message = payload.Note ?? payload.Information ?? "Alpha Vantage throttled request";
-        throw new Error(message);
-      }
-
-      const points = parseDailyPoints(payload, year);
-      if (points.length < 2) {
-        return null;
-      }
-      return points;
+      return {
+        history: history.length > 0 ? history : null,
+        latest,
+      };
     } catch (error) {
-      if (attempt === ALPHA_MAX_RETRIES) {
-        console.error(`AlphaVantage ${ticker} failed after ${attempt} attempts`, error);
-        return null;
+      if (attempt === YAHOO_MAX_RETRIES) {
+        console.error(`Yahoo ${ticker} failed after ${attempt} attempts`, error);
+        return { history: null, latest: null };
       }
-      const message = error instanceof Error ? error.message.toLowerCase() : "";
-      const throttled = message.includes("frequency") || message.includes("throttle") || message.includes("api call");
-      const backoffMs = throttled
-        ? ALPHA_MIN_REQUEST_INTERVAL_MS + 2000
-        : 1500 * attempt + Math.floor(Math.random() * 500);
+      const backoffMs = 350 * attempt + Math.floor(Math.random() * 300);
       await sleep(backoffMs);
     }
   }
 
-  return null;
+  return { history: null, latest: null };
 }
 
-export async function fetchDailySeriesMap(tickers: string[], year: number): Promise<Record<string, PricePoint[] | null>> {
-  const limit = pLimit(ALPHA_MAX_CONCURRENCY);
+export async function fetchDailySeriesAndLatestMap(
+  tickers: string[],
+  year: number
+): Promise<{ seriesByTicker: Record<string, PricePoint[] | null>; latestByTicker: Record<string, number | null> }> {
+  const limit = pLimit(YAHOO_MAX_CONCURRENCY);
   const tasks = tickers.map((ticker, index) =>
     limit(async () => {
-      if (index > 0 && ALPHA_MAX_CONCURRENCY > 1) {
-        await sleep(100);
+      if (index > 0) {
+        await sleep(40);
       }
-      const series = await fetchTickerDailySeries(ticker, year);
-      return [ticker, series] as const;
+      const { history, latest } = await fetchTickerDataWithRetry(ticker, year);
+      return [ticker, history, latest] as const;
     })
   );
 
   const entries = await Promise.all(tasks);
-  return Object.fromEntries(entries);
+  const seriesByTicker: Record<string, PricePoint[] | null> = {};
+  const latestByTicker: Record<string, number | null> = {};
+  for (const [ticker, history, latest] of entries) {
+    seriesByTicker[ticker] = history;
+    latestByTicker[ticker] = latest;
+  }
+  return { seriesByTicker, latestByTicker };
 }

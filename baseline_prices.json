@@ -1,0 +1,22 @@
+{
+  "_metadata": {
+    "anchor_date": "2026-01-01",
+    "source": "Yahoo Finance historical first trading close of current year",
+    "missing": [],
+    "generated_at": "2026-03-31T07:23:10.701Z"
+  },
+  "prices": {
+    "ZETA": 19.91,
+    "ASTS": 83.470001,
+    "GLDM": 85.739998,
+    "COIN": 236.529999,
+    "MU": 315.420013,
+    "HOOD": 115.209999,
+    "AMZN": 226.5,
+    "SOFI": 27.459999,
+    "GME": 20.620001,
+    "SPY": 683.169983,
+    "VT": 142.100006,
+    "VTI": 336.309998
+  }
+}

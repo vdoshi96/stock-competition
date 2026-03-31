@@ -11,8 +11,8 @@
   align-items: center;
   gap: 12px;
   padding: 16px 24px;
-  border-bottom: 1px solid #e2e8f0;
-  background: rgba(255, 255, 255, 0.9);
+  border-bottom: 1px solid var(--header-border);
+  background: var(--header-bg);
   backdrop-filter: blur(8px);
 }
 
@@ -30,7 +30,7 @@
 .brand p {
   margin: 2px 0 0;
   font-size: 0.8rem;
-  color: #64748b;
+  color: var(--text-muted);
 }
 
 .logo {
@@ -46,16 +46,16 @@
 }
 
 .updatedAt {
-  color: #64748b;
+  color: var(--text-muted);
   font-size: 0.8rem;
 }
 
 .githubButton,
 .refreshButton,
 .retryButton {
-  border: 1px solid #cbd5e1;
-  background: white;
-  color: #0f172a;
+  border: 1px solid var(--button-secondary-border);
+  background: var(--button-secondary-bg);
+  color: var(--button-secondary-text);
   border-radius: 8px;
   padding: 8px 12px;
   font-weight: 600;
@@ -65,18 +65,18 @@
 
 .refreshButton,
 .retryButton {
-  background: #0f172a;
-  color: white;
-  border-color: #0f172a;
+  background: var(--button-bg);
+  color: var(--button-text);
+  border-color: var(--button-border);
 }
 
 .loadingCard,
 .panel,
 .metricCard {
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid #e2e8f0;
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
   border-radius: 14px;
-  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+  box-shadow: var(--surface-shadow);
 }
 
 .loadingCard {
@@ -91,7 +91,7 @@
 
 .loadingCard p {
   margin: 0;
-  color: #64748b;
+  color: var(--text-muted);
 }
 
 .loadingCard .retryButton {
@@ -121,7 +121,7 @@
 }
 
 .metricCard span {
-  color: #64748b;
+  color: var(--text-muted);
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -132,7 +132,7 @@
 }
 
 .metricCard small {
-  color: #64748b;
+  color: var(--text-muted);
 }
 
 .panel {
@@ -171,7 +171,7 @@
 .panel th,
 .panel td {
   text-align: left;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--surface-border);
   padding: 10px 8px;
   font-size: 0.9rem;
 }
@@ -179,7 +179,8 @@
 .panel th {
   text-transform: uppercase;
   font-size: 0.72rem;
-  color: #64748b;
+  color: var(--text-muted);
+  background: var(--table-head-bg);
 }
 
 .badge {
@@ -188,21 +189,21 @@
   border-radius: 999px;
   padding: 2px 6px;
   font-size: 0.65rem;
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--badge-bg);
+  color: var(--badge-text);
 }
 
 .positive {
-  color: #16a34a;
+  color: var(--positive);
 }
 
 .negative {
-  color: #dc2626;
+  color: var(--negative);
 }
 
 .footer {
   text-align: center;
-  color: #64748b;
+  color: var(--text-muted);
   font-size: 0.8rem;
   padding: 10px 0 20px;
 }
