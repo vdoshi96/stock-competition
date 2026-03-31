@@ -49,7 +49,11 @@ export async function computeSnapshot(): Promise<SnapshotResponse> {
     mergedSeries[ticker] = points.length >= 2 ? points : null;
   }
 
-  const snapshot = buildSnapshotResponse(picks, mergedSeries, "Yahoo Finance + Locked Baseline");
+  const snapshot = buildSnapshotResponse(
+    picks,
+    mergedSeries,
+    "Yahoo Finance + Locked Baseline (Dec 31 close to regular market price)"
+  );
   const elapsedMs = Math.round(performance.now() - started);
   console.info(`snapshot computed for ${uniqueTickers.length} tickers in ${elapsedMs}ms`);
   return snapshot;

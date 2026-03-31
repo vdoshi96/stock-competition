@@ -33,11 +33,11 @@ function pickLatestQuotePrice(quote: Record<string, unknown> | null): number | n
   if (!quote) {
     return null;
   }
+  // Robinhood-style matching: prefer regular market price for period returns.
+  // Avoid post/pre-market quotes to reduce mismatch vs standard in-session YTD.
   const candidates = [
     quote.regularMarketPrice,
-    quote.postMarketPrice,
-    quote.preMarketPrice,
-    quote.currentPrice,
+    quote.regularMarketPreviousClose,
     quote.previousClose,
   ];
   for (const candidate of candidates) {
