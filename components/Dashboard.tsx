@@ -260,7 +260,6 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
           <Image src="/logo-mark.svg" alt="Stock Competition logo" className={styles.logo} width={40} height={40} priority />
           <div>
             <h1>Stock Competition</h1>
-            <p>Rebuilt for reliability on Vercel</p>
           </div>
         </div>
         <div className={styles.headerActions}>
