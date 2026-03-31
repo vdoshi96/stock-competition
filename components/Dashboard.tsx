@@ -23,7 +23,7 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarEleme
 const COLORS = ["#2563eb", "#ef4444", "#10b981", "#f59e0b", "#7c3aed", "#ec4899", "#06b6d4", "#f97316"];
 const BENCH_COLORS: Record<string, string> = { SPY: "#0f172a", VT: "#334155", VTI: "#64748b" };
 
-const MAX_AUTO_RETRY_MS = 180000;
+const MAX_AUTO_RETRY_MS = 420000;
 const MAX_RETRY_DELAY_MS = 60000;
 
 type LoadState = "loading" | "ready" | "error";
@@ -81,7 +81,9 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
         const delay = Math.min(10000 + retryCount.current * 5000, MAX_RETRY_DELAY_MS);
         setState("loading");
         setMessage("Building initial cache...");
-        setSubtitle(`Auto-retrying in ${Math.round(delay / 1000)} seconds.`);
+        setSubtitle(
+          `Alpha Vantage free-tier limits can slow first load. Auto-retrying in ${Math.round(delay / 1000)} seconds.`
+        );
         retryTimer.current = setTimeout(() => void fetchSnapshot(false), delay);
         return;
       }
@@ -276,8 +278,34 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
           <section className={styles.chartGrid}>
             <article className={styles.panel}>
               <h2>YTD Performance</h2>
+              <div className={styles.chartFrame}>
+                <Line
+                  data={charts.ytd}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: "bottom" } },
+                    scales: { y: { ticks: { callback: (v) => `${Number(v) >= 0 ? "+" : ""}${v}%` } } },
+                  }}
+                />
+              </div>
+            </article>
+            <article className={styles.panel}>
+              <h2>Current Balances</h2>
+              <div className={styles.chartFrame}>
+                <Bar
+                  data={charts.balances}
+                  options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }}
+                />
+              </div>
+            </article>
+          </section>
+
+          <section className={styles.panel}>
+            <h2>Group Average vs Benchmarks</h2>
+            <div className={styles.chartFrame}>
               <Line
-                data={charts.ytd}
+                data={charts.benchmark}
                 options={{
                   responsive: true,
                   maintainAspectRatio: false,
@@ -285,24 +313,7 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
                   scales: { y: { ticks: { callback: (v) => `${Number(v) >= 0 ? "+" : ""}${v}%` } } },
                 }}
               />
-            </article>
-            <article className={styles.panel}>
-              <h2>Current Balances</h2>
-              <Bar data={charts.balances} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }} />
-            </article>
-          </section>
-
-          <section className={styles.panel}>
-            <h2>Group Average vs Benchmarks</h2>
-            <Line
-              data={charts.benchmark}
-              options={{
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { position: "bottom" } },
-                scales: { y: { ticks: { callback: (v) => `${Number(v) >= 0 ? "+" : ""}${v}%` } } },
-              }}
-            />
+            </div>
           </section>
         </main>
       )}

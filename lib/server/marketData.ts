@@ -4,6 +4,7 @@ import {
   ALPHA_BASE_URL,
   ALPHA_MAX_CONCURRENCY,
   ALPHA_MAX_RETRIES,
+  ALPHA_MIN_REQUEST_INTERVAL_MS,
   ALPHA_TIMEOUT_MS,
 } from "@/lib/server/constants";
 import type { PricePoint } from "@/lib/types";
@@ -76,15 +77,28 @@ function parseDailyPoints(payload: AlphaDailyResponse, year: number): PricePoint
   return points;
 }
 
+let lastAlphaRequestStartedAt = 0;
+
+async function waitForAlphaRateWindow() {
+  const now = Date.now();
+  const elapsed = now - lastAlphaRequestStartedAt;
+  const waitMs = Math.max(0, ALPHA_MIN_REQUEST_INTERVAL_MS - elapsed);
+  if (waitMs > 0) {
+    await sleep(waitMs);
+  }
+  lastAlphaRequestStartedAt = Date.now();
+}
+
 export async function fetchTickerDailySeries(ticker: string, year: number): Promise<PricePoint[] | null> {
   const apiKey = getApiKey();
   const url =
     `${ALPHA_BASE_URL}?function=TIME_SERIES_DAILY_ADJUSTED&symbol=${encodeURIComponent(
       ticker
-    )}&outputsize=full&apikey=${encodeURIComponent(apiKey)}`;
+    )}&outputsize=compact&apikey=${encodeURIComponent(apiKey)}`;
 
   for (let attempt = 1; attempt <= ALPHA_MAX_RETRIES; attempt += 1) {
     try {
+      await waitForAlphaRateWindow();
       const response = await fetchWithTimeout(url, ALPHA_TIMEOUT_MS);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
@@ -109,7 +123,11 @@ export async function fetchTickerDailySeries(ticker: string, year: number): Prom
         console.error(`AlphaVantage ${ticker} failed after ${attempt} attempts`, error);
         return null;
       }
-      const backoffMs = 700 * attempt + Math.floor(Math.random() * 300);
+      const message = error instanceof Error ? error.message.toLowerCase() : "";
+      const throttled = message.includes("frequency") || message.includes("throttle") || message.includes("api call");
+      const backoffMs = throttled
+        ? ALPHA_MIN_REQUEST_INTERVAL_MS + 2000
+        : 1500 * attempt + Math.floor(Math.random() * 500);
       await sleep(backoffMs);
     }
   }
@@ -121,9 +139,8 @@ export async function fetchDailySeriesMap(tickers: string[], year: number): Prom
   const limit = pLimit(ALPHA_MAX_CONCURRENCY);
   const tasks = tickers.map((ticker, index) =>
     limit(async () => {
-      // Small stagger to reduce burst pressure on provider limits.
-      if (index > 0) {
-        await sleep(120);
+      if (index > 0 && ALPHA_MAX_CONCURRENCY > 1) {
+        await sleep(100);
       }
       const series = await fetchTickerDailySeries(ticker, year);
       return [ticker, series] as const;
