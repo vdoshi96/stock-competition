@@ -1,8 +1,10 @@
 import datetime
 import logging
 import os
+import random
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import csv
 import json
@@ -53,6 +55,10 @@ CACHE_TTL = 3600  # 1 hour
 
 STOOQ_BASE = "https://stooq.com/q/d/l/"
 CACHE_FILE = "/tmp/stock_cache.json"
+STOOQ_TIMEOUT = 20
+STOOQ_RETRIES = 2
+STOOQ_RETRY_BASE_DELAY = 0.4
+STOOQ_MAX_WORKERS = 5
 
 # ---------------------------------------------------------------------------
 # Cache
@@ -109,38 +115,73 @@ def _fetch_ticker_stooq(ticker: str, start_date: str, end_date: str) -> list[dic
     d2 = end_date.replace("-", "")
     url = f"{STOOQ_BASE}?s={symbol}&d1={d1}&d2={d2}&i=d"
 
-    try:
-        resp = http_requests.get(url, timeout=20)
-        if resp.status_code != 200 or not resp.text:
-            logger.warning(f"{ticker}: Stooq returned no data")
-            return None
+    for attempt in range(1, STOOQ_RETRIES + 1):
+        try:
+            resp = http_requests.get(url, timeout=STOOQ_TIMEOUT)
+            if resp.status_code != 200 or not resp.text:
+                raise RuntimeError(f"status={resp.status_code}")
 
-        if "No data" in resp.text:
-            logger.warning(f"{ticker}: Stooq returned 'No data'")
-            return None
+            if "No data" in resp.text:
+                logger.warning(f"{ticker}: Stooq returned 'No data'")
+                return None
 
-        reader = csv.DictReader(resp.text.splitlines())
-        result = []
-        for row in reader:
-            date_str = row.get("Date")
-            close_str = row.get("Close")
-            if not date_str or not close_str or close_str in ("", "0", "0.0"):
-                continue
+            reader = csv.DictReader(resp.text.splitlines())
+            result = []
+            for row in reader:
+                date_str = row.get("Date")
+                close_str = row.get("Close")
+                if not date_str or not close_str or close_str in ("", "0", "0.0"):
+                    continue
+                try:
+                    result.append({"date": date_str, "close": float(close_str)})
+                except ValueError:
+                    continue
+
+            if len(result) < 2:
+                logger.warning(f"{ticker}: Stooq insufficient data ({len(result)} points)")
+                return None
+
+            logger.info(f"{ticker}: Stooq got {len(result)} daily points")
+            return result
+        except Exception as e:
+            if attempt == STOOQ_RETRIES:
+                logger.error(f"{ticker}: Stooq fetch failed after {attempt} attempts: {e}")
+                return None
+            backoff = STOOQ_RETRY_BASE_DELAY * attempt + random.uniform(0.05, 0.2)
+            logger.warning(f"{ticker}: Stooq attempt {attempt} failed ({e}), retrying in {backoff:.2f}s")
+            time.sleep(backoff)
+
+    return None
+
+
+def _fetch_stooq_histories_parallel(tickers: list[str], start_date: str, end_date: str) -> dict[str, list[dict] | None]:
+    """Fetch Stooq histories concurrently with bounded worker pool."""
+    if not tickers:
+        return {}
+
+    workers = min(STOOQ_MAX_WORKERS, max(1, len(tickers)))
+    logger.info(f"Stooq parallel fetch: {len(tickers)} tickers with {workers} workers")
+    started = time.perf_counter()
+
+    histories: dict[str, list[dict] | None] = {}
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        future_to_ticker = {
+            executor.submit(_fetch_ticker_stooq, ticker, start_date, end_date): ticker
+            for ticker in tickers
+        }
+        for i, future in enumerate(as_completed(future_to_ticker), start=1):
+            ticker = future_to_ticker[future]
             try:
-                result.append({"date": date_str, "close": float(close_str)})
-            except ValueError:
-                continue
+                histories[ticker] = future.result()
+            except Exception as e:
+                logger.error(f"{ticker}: unexpected parallel fetch error: {e}")
+                histories[ticker] = None
+            logger.info(f"Fetched chart data for {ticker} ({i}/{len(tickers)})")
 
-        if len(result) < 2:
-            logger.warning(f"{ticker}: Stooq insufficient data ({len(result)} points)")
-            return None
-
-        logger.info(f"{ticker}: Stooq got {len(result)} daily points")
-        return result
-
-    except Exception as e:
-        logger.error(f"{ticker}: Stooq fetch failed: {e}")
-        return None
+    elapsed = time.perf_counter() - started
+    ok_count = sum(1 for v in histories.values() if v and len(v) >= 2)
+    logger.info(f"Stooq parallel fetch complete: {ok_count}/{len(tickers)} with data in {elapsed:.2f}s")
+    return histories
 
 
 # ---------------------------------------------------------------------------
@@ -167,10 +208,18 @@ def _build_data() -> dict:
             seen.add(t)
             unique_tickers.append(t)
 
+    build_started = time.perf_counter()
+
     # --- 1) TradingView: get accurate YTD numbers in ONE call ----------------
+    tv_started = time.perf_counter()
     tv_data = _fetch_tradingview_batch(unique_tickers)
+    logger.info(f"TradingView phase completed in {(time.perf_counter() - tv_started):.2f}s")
 
     # --- 2) Stooq: get daily time-series for each ticker ---------------------
+    stooq_started = time.perf_counter()
+    stooq_histories = _fetch_stooq_histories_parallel(unique_tickers, start_date, end_date)
+    logger.info(f"Stooq phase completed in {(time.perf_counter() - stooq_started):.2f}s")
+
     histories: dict[str, list[dict]] = {}
     ytd_returns: dict[str, float] = {}
     provider_parts: list[str] = []
@@ -178,11 +227,9 @@ def _build_data() -> dict:
     if tv_data:
         provider_parts.append("TradingView")
 
-    for i, ticker in enumerate(unique_tickers):
-        logger.info(f"Fetching chart data for {ticker} ({i+1}/{len(unique_tickers)})...")
-
+    for ticker in unique_tickers:
         tv = tv_data.get(ticker)
-        stooq_raw = _fetch_ticker_stooq(ticker, start_date, end_date)
+        stooq_raw = stooq_histories.get(ticker)
 
         # Determine YTD return
         if tv:
@@ -215,9 +262,6 @@ def _build_data() -> dict:
             histories[ticker] = series
         else:
             histories[ticker] = []
-
-        # Small delay between Stooq requests
-        time.sleep(0.3)
 
     logger.info(f"YTD returns: {ytd_returns}")
 
@@ -255,9 +299,12 @@ def _build_data() -> dict:
 
     # -- Daily group-average time series ------------------------------------
     all_dates = set()
+    user_date_maps: dict[str, dict[str, float]] = {}
     for ticker in list(USERS.values()):
-        for pt in histories.get(ticker, []):
-            all_dates.add(pt["date"])
+        series = histories.get(ticker, [])
+        date_map = {pt["date"]: pt["value"] for pt in series}
+        user_date_maps[ticker] = date_map
+        all_dates.update(date_map.keys())
     sorted_dates = sorted(all_dates)
 
     group_avg_history = []
@@ -266,7 +313,7 @@ def _build_data() -> dict:
         vals_all = []
         vals_filtered = []
         for name, ticker in USERS.items():
-            date_map = {pt["date"]: pt["value"] for pt in histories.get(ticker, [])}
+            date_map = user_date_maps.get(ticker, {})
             if d in date_map:
                 vals_all.append(date_map[d])
                 if ticker not in CRYPTO_ADJACENT:
@@ -282,7 +329,7 @@ def _build_data() -> dict:
 
     provider_label = " + ".join(provider_parts) if provider_parts else "Unknown"
 
-    return {
+    result = {
         "users": users,
         "benchmarks": benchmarks,
         "group_avg": group_avg,
@@ -293,6 +340,8 @@ def _build_data() -> dict:
         "updated_at": datetime.datetime.now().strftime("%b %d, %Y %I:%M %p"),
         "data_provider": provider_label,
     }
+    logger.info(f"Build data completed in {(time.perf_counter() - build_started):.2f}s")
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -339,15 +388,18 @@ def _refresh_cache():
 
     try:
         logger.info("Background refresh: starting...")
+        started = time.perf_counter()
         data = _build_data()
-        _cache["data"] = data
-        _cache["ts"] = time.time()
+        with _lock:
+            _cache["data"] = data
+            _cache["ts"] = time.time()
         _save_cache_to_disk(data)
-        logger.info("Background refresh: done!")
+        logger.info(f"Background refresh: done in {(time.perf_counter() - started):.2f}s")
     except Exception as e:
         logger.error(f"Background refresh failed: {e}")
     finally:
-        _cache["loading"] = False
+        with _lock:
+            _cache["loading"] = False
 
 
 def _schedule_refresh_loop():
@@ -359,17 +411,21 @@ def _schedule_refresh_loop():
 
 def get_data() -> dict:
     # First try memory
-    if _cache["data"] is not None:
-        return _cache["data"]
+    with _lock:
+        if _cache["data"] is not None:
+            return _cache["data"]
 
     # Then try disk (useful if multiple workers are running)
     disk_data, disk_ts = _load_cache_from_disk()
     if disk_data is not None:
-        _cache["data"] = disk_data
-        _cache["ts"] = disk_ts
+        with _lock:
+            _cache["data"] = disk_data
+            _cache["ts"] = disk_ts
         return disk_data
 
-    if not _cache["loading"]:
+    with _lock:
+        should_spawn = not _cache["loading"]
+    if should_spawn:
         threading.Thread(target=_refresh_cache, daemon=True).start()
 
     return {
@@ -396,7 +452,7 @@ def get_data() -> dict:
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", github_repo_url=os.getenv("GITHUB_REPO_URL", ""))
 
 
 @app.route("/api/data")

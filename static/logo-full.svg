@@ -1,0 +1,25 @@
+<svg width="640" height="180" viewBox="0 0 640 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="markBg" x1="16" y1="10" x2="126" y2="130" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1D4ED8"/>
+      <stop offset="1" stop-color="#0F172A"/>
+    </linearGradient>
+    <linearGradient id="markLine" x1="32" y1="102" x2="112" y2="38" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#60A5FA"/>
+      <stop offset="1" stop-color="#BFDBFE"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="14" y="14" width="124" height="124" rx="28" fill="url(#markBg)"/>
+  <path d="M36 96L58 74L74 84L108 50" stroke="url(#markLine)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="36" cy="96" r="4.5" fill="#DBEAFE"/>
+  <circle cx="58" cy="74" r="4.5" fill="#DBEAFE"/>
+  <circle cx="74" cy="84" r="4.5" fill="#DBEAFE"/>
+  <circle cx="108" cy="50" r="4.5" fill="#DBEAFE"/>
+  <path d="M106 64V48H90" stroke="#DBEAFE" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <g fill="#0F172A">
+    <text x="166" y="74" font-family="Inter, Arial, sans-serif" font-weight="800" font-size="42" letter-spacing="0.3">Stock Competition</text>
+    <text x="168" y="114" font-family="Inter, Arial, sans-serif" font-weight="500" font-size="24" fill="#334155">YTD Performance Tracker</text>
+  </g>
+</svg>
