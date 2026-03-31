@@ -20,7 +20,7 @@ import styles from "./dashboard.module.css";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Tooltip, Legend);
 
-const COLORS = ["#2563eb", "#ef4444", "#10b981", "#f59e0b", "#7c3aed", "#ec4899", "#06b6d4", "#f97316"];
+const COLORS = ["#ef4444", "#a855f7", "#14b8a6", "#f97316", "#eab308", "#ec4899", "#06b6d4", "#2563eb"];
 const BENCH_COLORS: Record<string, string> = {
   SPY: "#2563eb",
   VT: "#22c55e",
@@ -223,7 +223,7 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
             tension: 0.3,
           },
           {
-            label: "Filtered Avg (excl COIN, HOOD)",
+            label: "Filtered Avg (excl COIN, HOOD, SOFI)",
             data: benchLabels.map((date) => filteredMap[date] ?? null),
             borderColor: "#db2777",
             borderWidth: 2.4,
@@ -291,7 +291,7 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
           <section className={styles.cards}>
             {[
               { label: "Group Avg", value: snapshot.group_avg, sub: "All picks averaged" },
-              { label: "Filtered Avg", value: snapshot.filtered_avg, sub: "Excludes COIN & HOOD" },
+              { label: "Filtered Avg", value: snapshot.filtered_avg, sub: "Excludes COIN, HOOD & SOFI" },
               ...snapshot.benchmarks.map((item) => ({
                 label: `$${item.ticker}`,
                 value: item.ytd_return,
