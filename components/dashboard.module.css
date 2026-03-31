@@ -143,6 +143,35 @@
   margin: 0 0 12px;
 }
 
+.filterSection {
+  margin-bottom: 12px;
+}
+
+.filterLabel {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.filterGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 6px 10px;
+}
+
+.filterItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text-main);
+}
+
+.filterItem input {
+  width: 14px;
+  height: 14px;
+}
+
 .chartGrid {
   display: grid;
   gap: 14px;
@@ -161,6 +190,15 @@
   max-height: 330px;
   width: 100%;
   overflow: hidden;
+}
+
+.emptyState {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  color: var(--text-muted);
 }
 
 .panel table {

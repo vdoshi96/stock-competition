@@ -1,22 +1,36 @@
 {
   "_metadata": {
-    "anchor_date": "2026-01-01",
-    "source": "Yahoo Finance historical first trading close of current year",
+    "anchor_target_date": "2025-12-31",
+    "source": "Yahoo Finance regular close; Dec 31, 2025 with previous-trading-day fallback",
     "missing": [],
-    "generated_at": "2026-03-31T07:23:10.701Z"
+    "anchor_dates_used": {
+      "ZETA": "2025-12-31",
+      "ASTS": "2025-12-31",
+      "GLDM": "2025-12-31",
+      "COIN": "2025-12-31",
+      "MU": "2025-12-31",
+      "HOOD": "2025-12-31",
+      "AMZN": "2025-12-31",
+      "SOFI": "2025-12-31",
+      "GME": "2025-12-31",
+      "SPY": "2025-12-31",
+      "VT": "2025-12-31",
+      "VTI": "2025-12-31"
+    },
+    "generated_at": "2026-03-31T07:34:53.262Z"
   },
   "prices": {
-    "ZETA": 19.91,
-    "ASTS": 83.470001,
-    "GLDM": 85.739998,
-    "COIN": 236.529999,
-    "MU": 315.420013,
-    "HOOD": 115.209999,
-    "AMZN": 226.5,
-    "SOFI": 27.459999,
-    "GME": 20.620001,
-    "SPY": 683.169983,
-    "VT": 142.100006,
-    "VTI": 336.309998
+    "ZETA": 20.35,
+    "ASTS": 72.629997,
+    "GLDM": 85.370003,
+    "COIN": 226.139999,
+    "MU": 285.410004,
+    "HOOD": 113.099998,
+    "AMZN": 230.820007,
+    "SOFI": 26.18,
+    "GME": 20.08,
+    "SPY": 681.919983,
+    "VT": 141.059998,
+    "VTI": 335.269989
   }
 }

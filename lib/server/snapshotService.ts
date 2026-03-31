@@ -8,9 +8,9 @@ import type { SnapshotResponse } from "@/lib/types";
 
 export async function computeSnapshot(): Promise<SnapshotResponse> {
   const picks = await loadUserPicks();
-  const year = new Date().getUTCFullYear();
+  const year = 2026;
   const uniqueTickers = [...new Set([...picks.map((pick) => pick.ticker), ...BENCHMARKS])];
-  const baselineDate = `${year}-01-01`;
+  const baselineDate = "2025-12-31";
 
   const started = performance.now();
   const [baselineByTicker, yahooData] = await Promise.all([

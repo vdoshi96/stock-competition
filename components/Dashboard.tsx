@@ -21,7 +21,11 @@ import styles from "./dashboard.module.css";
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Tooltip, Legend);
 
 const COLORS = ["#2563eb", "#ef4444", "#10b981", "#f59e0b", "#7c3aed", "#ec4899", "#06b6d4", "#f97316"];
-const BENCH_COLORS: Record<string, string> = { SPY: "#0f172a", VT: "#334155", VTI: "#64748b" };
+const BENCH_COLORS: Record<string, string> = {
+  SPY: "#2563eb",
+  VT: "#22c55e",
+  VTI: "#f59e0b",
+};
 
 const MAX_AUTO_RETRY_MS = 420000;
 const MAX_RETRY_DELAY_MS = 60000;
@@ -59,6 +63,8 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
   const [message, setMessage] = useState("Fetching latest stock data...");
   const [subtitle, setSubtitle] = useState("Preparing market snapshots and chart histories.");
   const [chartTheme, setChartTheme] = useState<ChartTheme>({ text: "#334155", grid: "#e2e8f0" });
+  const [selectedYtdKeys, setSelectedYtdKeys] = useState<string[]>([]);
+  const selectedYtdKeysLength = selectedYtdKeys.length;
   const retryCount = useRef(0);
   const startedAt = useRef<number | null>(null);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -103,6 +109,12 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
       retryCount.current = 0;
       setSnapshot(data);
       setState("ready");
+
+      if (selectedYtdKeysLength === 0 && data.users.length > 0) {
+        // Default only the current leader, per requirement.
+        const leader = data.users[0];
+        setSelectedYtdKeys([`user:${leader.ticker}`]);
+      }
     } catch (error) {
       setState("error");
       setMessage("Unable to load market data");
@@ -110,7 +122,7 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
     } finally {
       inFlight.current = false;
     }
-  }, []);
+  }, [selectedYtdKeysLength]);
 
   useEffect(() => {
     void fetchSnapshot(false);
@@ -133,20 +145,38 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
     if (!snapshot) return null;
     const userTickers = snapshot.users.map((user) => user.ticker);
     const chartTickers = [...userTickers, "SPY", "VT", "VTI"];
+    const ytdOptions = [
+      ...snapshot.users.map((user) => ({
+        key: `user:${user.ticker}`,
+        ticker: user.ticker,
+        label: `${user.name} ($${user.ticker})`,
+        isBenchmark: false,
+      })),
+      ...["SPY", "VT", "VTI"].map((ticker) => ({
+        key: `benchmark:${ticker}`,
+        ticker,
+        label: `$${ticker}`,
+        isBenchmark: true,
+      })),
+    ];
+
+    const selectedKeysSet = new Set(selectedYtdKeys);
+    const activeOptions = ytdOptions.filter((option) =>
+      selectedKeysSet.size === 0 ? false : selectedKeysSet.has(option.key)
+    );
     const ytdDates = uniqueSortedDates(snapshot.histories, chartTickers);
 
-    const ytdDatasets = chartTickers.map((ticker, index) => {
+    const ytdDatasets = activeOptions.map((option, index) => {
+      const ticker = option.ticker;
       const points = snapshot.histories[ticker] ?? [];
       const map = Object.fromEntries(points.map((point) => [point.date, point.value]));
-      const user = snapshot.users.find((entry) => entry.ticker === ticker);
-      const isBenchmark = ["SPY", "VT", "VTI"].includes(ticker);
-      const color = isBenchmark ? BENCH_COLORS[ticker] : COLORS[index % COLORS.length];
+      const color = option.isBenchmark ? BENCH_COLORS[ticker] : COLORS[index % COLORS.length];
       return {
-        label: user ? `${user.name} ($${ticker})` : `$${ticker}`,
+        label: option.label,
         data: ytdDates.map((date) => map[date] ?? null),
         borderColor: color,
-        borderWidth: isBenchmark ? 2.4 : 1.8,
-        borderDash: isBenchmark ? [6, 3] : undefined,
+        borderWidth: option.isBenchmark ? 2.6 : 1.8,
+        borderDash: option.isBenchmark ? [8, 4] : undefined,
         pointRadius: 0,
         tension: 0.3,
       };
@@ -164,6 +194,7 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
     const filteredMap = buildMapped(snapshot.filtered_avg_history);
 
     return {
+      ytdOptions,
       ytd: {
         labels: ytdDates,
         datasets: ytdDatasets,
@@ -214,7 +245,13 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
         ],
       },
     };
-  }, [snapshot]);
+  }, [snapshot, selectedYtdKeys]);
+
+  const toggleYtdKey = (key: string) => {
+    setSelectedYtdKeys((current) =>
+      current.includes(key) ? current.filter((value) => value !== key) : [...current, key]
+    );
+  };
 
   return (
     <div className={styles.page}>
@@ -301,22 +338,46 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
           <section className={styles.chartGrid}>
             <article className={styles.panel}>
               <h2>YTD Performance</h2>
+              {charts.ytdOptions.length > 0 ? (
+                <div className={styles.filterSection}>
+                  <p className={styles.filterLabel}>Compare series (users + benchmarks):</p>
+                  <div className={styles.filterGrid}>
+                    {charts.ytdOptions.map((option) => {
+                      const checked = selectedYtdKeys.includes(option.key);
+                      return (
+                        <label key={option.key} className={styles.filterItem}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleYtdKey(option.key)}
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
               <div className={styles.chartFrame}>
-                <Line
-                  data={charts.ytd}
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { position: "bottom" } },
-                    scales: {
-                      x: { ticks: { color: chartTheme.text }, grid: { color: chartTheme.grid } },
-                      y: {
-                        ticks: { color: chartTheme.text, callback: (v) => `${Number(v) >= 0 ? "+" : ""}${v}%` },
-                        grid: { color: chartTheme.grid },
+                {charts.ytd.datasets.length > 0 ? (
+                  <Line
+                    data={charts.ytd}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: { legend: { position: "bottom" } },
+                      scales: {
+                        x: { ticks: { color: chartTheme.text }, grid: { color: chartTheme.grid } },
+                        y: {
+                          ticks: { color: chartTheme.text, callback: (v) => `${Number(v) >= 0 ? "+" : ""}${v}%` },
+                          grid: { color: chartTheme.grid },
+                        },
                       },
-                    },
-                  }}
-                />
+                    }}
+                  />
+                ) : (
+                  <div className={styles.emptyState}>Select at least one series to compare.</div>
+                )}
               </div>
             </article>
             <article className={styles.panel}>

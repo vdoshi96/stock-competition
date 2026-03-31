@@ -8,7 +8,7 @@ const OUT_FILE = path.join(ROOT, "baseline_prices.json");
 const BENCHMARKS = ["SPY", "VT", "VTI"];
 const yahooFinance = new YahooFinance();
 
-const ANCHOR_DATE = `${new Date().getUTCFullYear()}-01-01`;
+const TARGET_ANCHOR_DATE = "2025-12-31";
 
 function parseTickers(markdown) {
   const lines = markdown.split(/\r?\n/);
@@ -23,31 +23,54 @@ function parseTickers(markdown) {
 }
 
 async function fetchBaseline(ticker) {
-  const period2 = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const period1 = "2025-12-01";
+  const period2 = "2026-01-03";
   const rows = await yahooFinance.historical(ticker, {
-    period1: ANCHOR_DATE,
+    period1,
     period2,
     interval: "1d",
   });
-  if (!rows || rows.length === 0) return null;
-  const first = rows.find((row) => typeof row?.close === "number");
-  return first?.close ? Number(first.close.toFixed(6)) : null;
+  if (!rows || rows.length === 0) {
+    return { baseline: null, anchorDateUsed: null };
+  }
+
+  const validRows = rows
+    .filter((row) => row?.date instanceof Date && typeof row?.close === "number")
+    .map((row) => ({
+      date: row.date.toISOString().slice(0, 10),
+      close: Number(row.close),
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const onTarget = validRows.find((row) => row.date === TARGET_ANCHOR_DATE);
+  if (onTarget) {
+    return { baseline: Number(onTarget.close.toFixed(6)), anchorDateUsed: onTarget.date };
+  }
+
+  const fallback = [...validRows].reverse().find((row) => row.date < TARGET_ANCHOR_DATE);
+  if (!fallback) {
+    return { baseline: null, anchorDateUsed: null };
+  }
+  return { baseline: Number(fallback.close.toFixed(6)), anchorDateUsed: fallback.date };
 }
 
 async function main() {
   const picksRaw = await fs.readFile(PICKS_FILE, "utf-8");
   const tickers = parseTickers(picksRaw);
   const prices = {};
+  const anchor_dates_used = {};
   const missing = [];
 
   for (const ticker of tickers) {
     try {
-      const baseline = await fetchBaseline(ticker);
+      const { baseline, anchorDateUsed } = await fetchBaseline(ticker);
       prices[ticker] = baseline;
+      anchor_dates_used[ticker] = anchorDateUsed;
       if (baseline == null) missing.push(ticker);
-      console.log(`${ticker}: ${baseline ?? "MISSING"}`);
+      console.log(`${ticker}: ${baseline ?? "MISSING"} (${anchorDateUsed ?? "no anchor"})`);
     } catch (error) {
       prices[ticker] = null;
+      anchor_dates_used[ticker] = null;
       missing.push(ticker);
       console.error(`${ticker}: MISSING`, error?.message ?? error);
     }
@@ -55,9 +78,10 @@ async function main() {
 
   const payload = {
     _metadata: {
-      anchor_date: ANCHOR_DATE,
-      source: "Yahoo Finance historical first trading close of current year",
+      anchor_target_date: TARGET_ANCHOR_DATE,
+      source: "Yahoo Finance regular close; Dec 31, 2025 with previous-trading-day fallback",
       missing,
+      anchor_dates_used,
       generated_at: new Date().toISOString(),
     },
     prices,
