@@ -172,6 +172,10 @@ let balanceChartInstance = null;
 let benchmarkChartInstance = null;
 let ytdOriginalStyles = [];
 let ytdHighlightedIndex = -1;
+let loadingRetryTimer = null;
+let loadingRetryCount = 0;
+let loadingStartedAt = null;
+let loadingRequestInFlight = false;
 
 Chart.defaults.font.family = 'Inter, system-ui, -apple-system, sans-serif';
 Chart.defaults.color = '#475569';
@@ -182,7 +186,31 @@ function setLoadingState(title, subtitle, showRetry = false) {
     document.getElementById('retry-btn').classList.toggle('hidden', !showRetry);
 }
 
+function clearLoadingRetry() {
+    if (loadingRetryTimer) {
+        clearTimeout(loadingRetryTimer);
+        loadingRetryTimer = null;
+    }
+}
+
+function scheduleLoadingRetry() {
+    clearLoadingRetry();
+    loadingRetryCount += 1;
+    const delayMs = Math.min(10000 + (loadingRetryCount * 5000), 60000);
+    loadingRetryTimer = setTimeout(() => {
+        loadingRetryTimer = null;
+        loadData();
+    }, delayMs);
+    return delayMs;
+}
+
 async function loadData() {
+    clearLoadingRetry();
+    if (loadingRequestInFlight) {
+        return;
+    }
+    loadingRequestInFlight = true;
+
     const btn = document.getElementById('refresh-btn');
     btn.classList.add('animate-spin');
     setLoadingState('Fetching latest stock data...', 'Preparing market snapshots and chart histories.', false);
@@ -194,12 +222,31 @@ async function loadData() {
         }
         const data = await resp.json();
         if (data._loading) {
+            if (!loadingStartedAt) {
+                loadingStartedAt = Date.now();
+            }
             document.getElementById('loading').classList.remove('hidden');
             document.getElementById('content').classList.add('hidden');
-            setLoadingState('Building initial cache...', 'This can take around 10-20 seconds on first load. Auto-retrying in 10 seconds.', false);
-            setTimeout(loadData, 10000);
+            const loadingForMs = Date.now() - loadingStartedAt;
+            if (loadingForMs >= 180000) {
+                setLoadingState(
+                    'Still warming up the backend cache',
+                    'Auto-retry has paused after 3 minutes. Please use Retry.',
+                    true
+                );
+                return;
+            }
+            const nextDelayMs = scheduleLoadingRetry();
+            setLoadingState(
+                'Building initial cache...',
+                `First load can take longer under API throttling. Auto-retrying in ${Math.round(nextDelayMs / 1000)} seconds.`,
+                false
+            );
             return;
         }
+        clearLoadingRetry();
+        loadingRetryCount = 0;
+        loadingStartedAt = null;
         render(data);
     } catch (err) {
         console.error('Failed to load data:', err);
@@ -207,6 +254,7 @@ async function loadData() {
         document.getElementById('content').classList.add('hidden');
         setLoadingState('Unable to load market data', 'Check your connection or try again. If this persists, the backend may still be warming up.', true);
     } finally {
+        loadingRequestInFlight = false;
         btn.classList.remove('animate-spin');
     }
 }

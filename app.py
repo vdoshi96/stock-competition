@@ -380,9 +380,9 @@ def _load_cache_from_disk() -> tuple[dict | None, float]:
 # Background refresh — fetches data without blocking web requests
 # ---------------------------------------------------------------------------
 
-def _refresh_cache():
+def _refresh_cache(assume_loading: bool = False):
     with _lock:
-        if _cache["loading"]:
+        if _cache["loading"] and not assume_loading:
             return
         _cache["loading"] = True
 
@@ -425,8 +425,11 @@ def get_data() -> dict:
 
     with _lock:
         should_spawn = not _cache["loading"]
+        if should_spawn:
+            # Mark loading before spawning to avoid request-race thread storms.
+            _cache["loading"] = True
     if should_spawn:
-        threading.Thread(target=_refresh_cache, daemon=True).start()
+        threading.Thread(target=_refresh_cache, kwargs={"assume_loading": True}, daemon=True).start()
 
     return {
         "users": [
@@ -491,15 +494,19 @@ def health():
 @app.route("/api/clear-cache")
 def clear_cache():
     """Force a fresh data fetch (clears memory + disk cache)."""
-    _cache["data"] = None
-    _cache["ts"] = 0
+    with _lock:
+        _cache["data"] = None
+        _cache["ts"] = 0
+        should_spawn = not _cache["loading"]
+        if should_spawn:
+            _cache["loading"] = True
     try:
         if os.path.exists(CACHE_FILE):
             os.remove(CACHE_FILE)
     except Exception:
         pass
-    if not _cache["loading"]:
-        threading.Thread(target=_refresh_cache, daemon=True).start()
+    if should_spawn:
+        threading.Thread(target=_refresh_cache, kwargs={"assume_loading": True}, daemon=True).start()
     return jsonify({"status": "cache_cleared", "refreshing": True})
 
 
