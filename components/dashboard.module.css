@@ -608,4 +608,61 @@
     height: 300px;
     min-height: 300px;
   }
+
+  .tableFrame {
+    overflow-x: visible;
+  }
+
+  .panel table {
+    display: block;
+    min-width: 0;
+  }
+
+  .panel thead {
+    display: none;
+  }
+
+  .panel tbody {
+    display: grid;
+    gap: 10px;
+  }
+
+  .panel tr {
+    display: grid;
+    gap: 9px;
+    padding: 12px;
+    border: 1px solid var(--surface-border);
+    border-radius: 8px;
+    background: var(--muted-surface);
+  }
+
+  .panel td {
+    display: grid;
+    grid-template-columns: minmax(96px, 0.42fr) minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+    padding: 0;
+    border-bottom: 0;
+    font-size: 0.84rem;
+    overflow-wrap: anywhere;
+  }
+
+  .panel td::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 0.64rem;
+    font-weight: 900;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .symbolCell {
+    min-width: 0;
+  }
+
+  .symbolCell strong,
+  .symbolCell span,
+  .panel td strong {
+    overflow-wrap: anywhere;
+  }
 }
