@@ -349,7 +349,7 @@
 }
 
 .subtleText,
-.symbolCell span,
+.symbolOwner,
 .rankHint {
   display: block;
   color: var(--text-muted);
@@ -375,18 +375,42 @@
   gap: 10px;
 }
 
-.symbolBadge {
+.symbolCell .symbolBadge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 34px;
   width: 34px;
   height: 34px;
+  padding: 4px;
   border-radius: 8px;
-  background: var(--symbol-bg);
-  color: var(--symbol-text);
+  border: 1px solid color-mix(in srgb, var(--positive) 28%, var(--surface-border));
+  background:
+    radial-gradient(circle at 30% 20%, rgba(0, 199, 129, 0.18), transparent 44%),
+    #0a1410;
+  color: #eef7f2;
   font-size: 0.72rem;
   font-weight: 900;
+  line-height: 1;
+  margin-top: 0;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 8px 18px rgba(0, 0, 0, 0.18);
+}
+
+.symbolLogo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+
+.symbolFallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
 }
 
 .positive {
@@ -443,6 +467,163 @@
   min-height: 340px;
   width: 100%;
   overflow: hidden;
+}
+
+.valueRace {
+  height: 100%;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.valueRaceRow {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0)),
+    var(--muted-surface);
+}
+
+.valueRaceRank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--rank-bg);
+  color: var(--rank-text);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.valueRaceMain {
+  min-width: 0;
+}
+
+.valueRaceTopline {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.valueRaceTopline strong,
+.valueRaceTopline span {
+  display: block;
+}
+
+.valueRaceTopline strong {
+  font-size: 0.9rem;
+}
+
+.valueRaceTopline span {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}
+
+.valueRaceTopline > div:last-child {
+  text-align: right;
+}
+
+.valueTrack {
+  height: 8px;
+  margin-top: 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-border) 70%, transparent);
+  overflow: hidden;
+}
+
+.valueTrack span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.valueTrackPositive {
+  background: linear-gradient(90deg, rgba(0, 199, 129, 0.55), #00c781);
+  box-shadow: 0 0 18px rgba(0, 199, 129, 0.22);
+}
+
+.valueTrackNegative {
+  background: linear-gradient(90deg, rgba(217, 45, 32, 0.45), #ff5a4f);
+  box-shadow: 0 0 18px rgba(217, 45, 32, 0.18);
+}
+
+.benchmarkChart {
+  height: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.benchmarkSvg {
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  display: block;
+  overflow: visible;
+}
+
+.benchmarkGridLine {
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.benchmarkYAxisText,
+.benchmarkXAxisText {
+  fill: var(--chart-text);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.benchmarkLine {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.axisBreakMark path {
+  fill: none;
+  stroke: var(--chart-text);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.benchmarkLegend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px 14px;
+  color: var(--text-main);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.benchmarkLegend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.benchmarkLegend i {
+  width: 13px;
+  height: 13px;
+  border: 3px solid currentColor;
+  border-radius: 999px;
 }
 
 .emptyState {
@@ -661,8 +842,42 @@
   }
 
   .symbolCell strong,
-  .symbolCell span,
+  .symbolOwner,
   .panel td strong {
     overflow-wrap: anywhere;
+  }
+
+  .valueRace {
+    overflow-y: visible;
+    padding-right: 0;
+  }
+
+  .valueFrame {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .valueRaceTopline {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .valueRaceTopline > div:last-child {
+    text-align: left;
+  }
+
+  .benchmarkChart {
+    gap: 10px;
+  }
+
+  .benchmarkYAxisText,
+  .benchmarkXAxisText {
+    font-size: 0.62rem;
+  }
+
+  .benchmarkLegend {
+    gap: 8px 10px;
+    font-size: 0.72rem;
   }
 }

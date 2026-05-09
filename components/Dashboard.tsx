@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import {
-  BarElement,
   CategoryScale,
   Chart as ChartJS,
   Legend,
@@ -12,23 +11,46 @@ import {
   PointElement,
   Tooltip,
 } from "chart.js";
-import { Bar, Line } from "react-chartjs-2";
+import { Line } from "react-chartjs-2";
 
 import type { SeriesPoint, SnapshotResponse, SnapshotUser } from "@/lib/types";
 
 import styles from "./dashboard.module.css";
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Tooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
 const COLORS = ["#00a66a", "#2364aa", "#9b5de5", "#f15bb5", "#00b4d8", "#f59f00", "#64748b", "#ef4444"];
 const BENCH_COLORS: Record<string, string> = {
-  SPY: "#2364aa",
-  VT: "#00a66a",
-  VTI: "#f59f00",
+  SPY: "#2f80ed",
+  VT: "#14b8a6",
+  VTI: "#f59e0b",
+};
+const GROUP_AVG_COLOR = "#00c781";
+const FILTERED_AVG_COLOR = "#a855f7";
+
+type PercentAxisBreak = {
+  from: number;
+  to: number;
+  ratio: number;
+};
+
+type PercentAxisScale = {
+  min: number | undefined;
+  max: number | undefined;
+  ticks: number[];
+};
+
+type BenchmarkDataset = {
+  label: string;
+  data: (number | null)[];
+  borderColor: string;
+  borderDash?: number[];
+  borderWidth?: number;
 };
 
 const MAX_AUTO_RETRY_MS = 420000;
 const MAX_RETRY_DELAY_MS = 60000;
+const LOGO_SOURCE = "https://financialmodelingprep.com/image-stock";
 
 type LoadState = "loading" | "ready" | "error";
 type ChartTheme = { text: string; grid: string };
@@ -55,6 +77,10 @@ function uniqueSortedDates(seriesMap: Record<string, SeriesPoint[]>, only?: stri
 
 function formatPct(value: number): string {
   return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
+}
+
+function formatAxisPct(value: number): string {
+  return `${value >= 0 ? "+" : ""}${value.toFixed(0)}%`;
 }
 
 function formatCurrency(value: number | null | undefined): string {
@@ -93,15 +119,241 @@ function rankLabel(index: number) {
   return `${index + 1}`;
 }
 
+function logoSymbol(ticker: string) {
+  return ticker.trim().toUpperCase().replace(/\./g, "-");
+}
+
+function TickerLogo({ ticker }: { ticker: string }) {
+  const [failed, setFailed] = useState(false);
+  const symbol = logoSymbol(ticker);
+
+  return (
+    <span className={styles.symbolBadge}>
+      {failed ? (
+        <span className={styles.symbolFallback}>{symbol.slice(0, 2)}</span>
+      ) : (
+        <Image
+          src={`${LOGO_SOURCE}/${encodeURIComponent(symbol)}.png`}
+          alt={`${ticker} company logo`}
+          width={30}
+          height={30}
+          className={styles.symbolLogo}
+          onError={() => setFailed(true)}
+        />
+      )}
+    </span>
+  );
+}
+
+function createPercentAxisBreak(values: number[]): PercentAxisBreak | null {
+  const finite = values.filter((value) => Number.isFinite(value)).sort((a, b) => a - b);
+  if (finite.length < 8) return null;
+  const max = finite[finite.length - 1];
+  const median = finite[Math.floor(finite.length / 2)];
+  return max >= 30 && max - median >= 16 ? { from: 18, to: 28, ratio: 0.24 } : null;
+}
+
+function transformPercent(value: number | null, axisBreak: PercentAxisBreak | null): number | null {
+  if (value == null || !axisBreak) return value;
+  if (value <= axisBreak.from) return value;
+  if (value < axisBreak.to) {
+    return axisBreak.from + (value - axisBreak.from) * axisBreak.ratio;
+  }
+  return axisBreak.from + (axisBreak.to - axisBreak.from) * axisBreak.ratio + (value - axisBreak.to);
+}
+
+function createPercentAxisScale(values: number[], axisBreak: PercentAxisBreak | null): PercentAxisScale {
+  const finite = values.filter((value) => Number.isFinite(value));
+  if (finite.length === 0) return { min: undefined, max: undefined, ticks: [] };
+  const minTick = Math.floor(Math.min(0, Math.min(...finite)) / 5) * 5;
+  const maxTick = Math.ceil(Math.max(0, Math.max(...finite)) / 5) * 5;
+
+  if (!axisBreak) {
+    const ticks = [];
+    for (let tick = minTick; tick <= maxTick; tick += 5) ticks.push(tick);
+    return { min: minTick, max: maxTick, ticks };
+  }
+
+  const ticks = [];
+  for (let tick = minTick; tick <= Math.min(axisBreak.from, maxTick); tick += 5) {
+    ticks.push(tick);
+  }
+  ticks.push(axisBreak.from, axisBreak.to);
+  for (let tick = Math.ceil(axisBreak.to / 5) * 5; tick <= maxTick; tick += 5) {
+    ticks.push(tick);
+  }
+
+  const uniqueTicks = [...new Set(ticks)]
+    .filter((tick) => tick >= minTick && tick <= maxTick)
+    .sort((a, b) => a - b);
+
+  return {
+    min: transformPercent(minTick, axisBreak) ?? minTick,
+    max: transformPercent(maxTick, axisBreak) ?? maxTick,
+    ticks: uniqueTicks,
+  };
+}
+
+function ValueRaceChart({ users }: { users: SnapshotUser[] }) {
+  const maxBalance = Math.max(...users.map((user) => user.balance), 1);
+
+  return (
+    <div className={styles.valueRace} aria-label="Current portfolio values">
+      {users.map((user, index) => {
+        const width = Math.max(8, Math.min(100, (user.balance / maxBalance) * 100));
+        const isPositive = user.ytd_return >= 0;
+        return (
+          <article key={`${user.name}-${user.ticker}`} className={styles.valueRaceRow}>
+            <div className={styles.valueRaceRank}>{index + 1}</div>
+            <div className={styles.valueRaceMain}>
+              <div className={styles.valueRaceTopline}>
+                <div>
+                  <strong>{user.name}</strong>
+                  <span>{user.ticker}</span>
+                </div>
+                <div>
+                  <strong>{formatCurrency(user.balance)}</strong>
+                  <span className={isPositive ? styles.positive : styles.negative}>{formatPct(user.ytd_return)}</span>
+                </div>
+              </div>
+              <div className={styles.valueTrack} aria-hidden="true">
+                <span
+                  className={isPositive ? styles.valueTrackPositive : styles.valueTrackNegative}
+                  style={{ width: `${width}%` }}
+                />
+              </div>
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+function BenchmarkComparisonChart({
+  labels,
+  datasets,
+  axisBreak,
+  axisScale,
+}: {
+  labels: string[];
+  datasets: BenchmarkDataset[];
+  axisBreak: PercentAxisBreak | null;
+  axisScale: PercentAxisScale;
+}) {
+  const width = 760;
+  const height = 340;
+  const margin = { top: 18, right: 20, bottom: 64, left: 64 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  const yMin = axisScale.min ?? -15;
+  const yMax = axisScale.max ?? 35;
+  const yRange = Math.max(1, yMax - yMin);
+  const xFor = (index: number) => margin.left + (labels.length <= 1 ? 0 : (index / (labels.length - 1)) * plotWidth);
+  const yFor = (value: number) => margin.top + ((yMax - value) / yRange) * plotHeight;
+  const labelTickCount = 6;
+  const labelIndexes = Array.from({ length: labelTickCount }, (_, index) =>
+    Math.round((index / (labelTickCount - 1)) * Math.max(labels.length - 1, 0))
+  );
+  const uniqueLabelIndexes = [...new Set(labelIndexes)];
+  const yTicks = axisScale.ticks.length > 0 ? axisScale.ticks : [-15, -10, -5, 0, 5, 10, 15, 20, 25, 30, 35];
+
+  const buildPath = (data: (number | null)[]) => {
+    let started = false;
+    return data
+      .map((value, index) => {
+        if (value == null || !Number.isFinite(value)) {
+          started = false;
+          return "";
+        }
+        const command = started ? "L" : "M";
+        started = true;
+        return `${command} ${xFor(index).toFixed(2)} ${yFor(value).toFixed(2)}`;
+      })
+      .filter(Boolean)
+      .join(" ");
+  };
+
+  return (
+    <div className={styles.benchmarkChart} aria-label="Group and market benchmark performance">
+      <svg className={styles.benchmarkSvg} viewBox={`0 0 ${width} ${height}`} role="img">
+        <title>Group vs market performance</title>
+        <desc>Percent returns since the official Dec. 31, 2025 baseline.</desc>
+        <g>
+          {yTicks.map((rawTick) => {
+            const tick = transformPercent(rawTick, axisBreak) ?? rawTick;
+            const y = yFor(tick);
+            return (
+              <g key={`y-${rawTick}`}>
+                <line className={styles.benchmarkGridLine} x1={margin.left} x2={width - margin.right} y1={y} y2={y} />
+                <text className={styles.benchmarkYAxisText} x={margin.left - 10} y={y + 4} textAnchor="end">
+                  {formatAxisPct(rawTick)}
+                </text>
+              </g>
+            );
+          })}
+          {uniqueLabelIndexes.map((index) => {
+            const x = xFor(index);
+            return (
+              <g key={`x-${labels[index]}`}>
+                <line
+                  className={styles.benchmarkGridLine}
+                  x1={x}
+                  x2={x}
+                  y1={margin.top}
+                  y2={height - margin.bottom}
+                />
+                <text
+                  className={styles.benchmarkXAxisText}
+                  x={x}
+                  y={height - margin.bottom + 30}
+                  textAnchor="end"
+                  transform={`rotate(-35 ${x} ${height - margin.bottom + 30})`}
+                >
+                  {labels[index]}
+                </text>
+              </g>
+            );
+          })}
+          {axisBreak ? (
+            <g className={styles.axisBreakMark} transform={`translate(${margin.left - 24} ${yFor(axisBreak.from) - 7})`}>
+              <path d="M0 7 L8 0 L16 7" />
+              <path d="M0 16 L8 9 L16 16" />
+            </g>
+          ) : null}
+          {datasets.map((dataset) => (
+            <path
+              key={dataset.label}
+              className={styles.benchmarkLine}
+              d={buildPath(dataset.data)}
+              stroke={dataset.borderColor}
+              strokeWidth={dataset.borderWidth ?? 2.4}
+              strokeDasharray={dataset.borderDash ? "7 5" : undefined}
+            />
+          ))}
+        </g>
+      </svg>
+      <div className={styles.benchmarkLegend} aria-label="Benchmark legend">
+        {datasets.map((dataset) => (
+          <span key={dataset.label}>
+            <i style={{ borderColor: dataset.borderColor }} />
+            {dataset.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function HoldingRow({ user, index }: { user: SnapshotUser; index: number }) {
   return (
     <tr>
       <td data-label="Symbol">
         <div className={styles.symbolCell}>
-          <span className={styles.symbolBadge}>{user.ticker.slice(0, 2)}</span>
+          <TickerLogo ticker={user.ticker} />
           <div>
             <strong>{user.ticker}</strong>
-            <span>{user.name}</span>
+            <span className={styles.symbolOwner}>{user.name}</span>
           </div>
         </div>
       </td>
@@ -279,6 +531,18 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
     const buildMapped = (series: SeriesPoint[]) => Object.fromEntries(series.map((point) => [point.date, point.value]));
     const groupMap = buildMapped(snapshot.group_avg_history);
     const filteredMap = buildMapped(snapshot.filtered_avg_history);
+    const benchmarkRawValues = [
+      ...benchLabels.map((date) => groupMap[date]),
+      ...benchLabels.map((date) => filteredMap[date]),
+      ...benchmarkTickers.flatMap((ticker) => {
+        const map = buildMapped(snapshot.histories[ticker] ?? []);
+        return benchLabels.map((date) => map[date]);
+      }),
+    ].filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+    const benchmarkAxisBreak = createPercentAxisBreak(benchmarkRawValues);
+    const benchmarkAxisScale = createPercentAxisScale(benchmarkRawValues, benchmarkAxisBreak);
+    const mapBenchmarkValue = (value: number | null | undefined) =>
+      transformPercent(value == null ? null : value, benchmarkAxisBreak);
 
     return {
       ytdOptions,
@@ -286,47 +550,42 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
         labels: ytdDates,
         datasets: ytdDatasets,
       },
-      balances: {
-        labels: snapshot.users.map((user) => user.name),
-        datasets: [
-          {
-            label: "Balance",
-            data: snapshot.users.map((user) => user.balance),
-            borderWidth: 1,
-            borderColor: snapshot.users.map((user) => (user.ytd_return >= 0 ? "#00a66a" : "#d92d20")),
-            backgroundColor: snapshot.users.map((user) => (user.ytd_return >= 0 ? "#00a66a33" : "#d92d2033")),
-            borderRadius: 8,
-          },
-        ],
-      },
+      benchmarkAxisBreak,
+      benchmarkAxisScale,
       benchmark: {
         labels: benchLabels,
         datasets: [
           {
             label: "Group Average",
-            data: benchLabels.map((date) => groupMap[date] ?? null),
-            borderColor: "#00a66a",
-            borderWidth: 2.6,
+            data: benchLabels.map((date) => mapBenchmarkValue(groupMap[date])),
+            borderColor: GROUP_AVG_COLOR,
+            borderWidth: 3,
             pointRadius: 0,
+            pointHoverRadius: 4,
+            spanGaps: true,
             tension: 0.32,
           },
           {
             label: "Filtered Average",
-            data: benchLabels.map((date) => filteredMap[date] ?? null),
-            borderColor: "#2364aa",
-            borderWidth: 2.4,
+            data: benchLabels.map((date) => mapBenchmarkValue(filteredMap[date])),
+            borderColor: FILTERED_AVG_COLOR,
+            borderWidth: 3,
             pointRadius: 0,
+            pointHoverRadius: 4,
+            spanGaps: true,
             tension: 0.32,
           },
           ...benchmarkTickers.map((ticker) => {
             const map = buildMapped(snapshot.histories[ticker] ?? []);
             return {
               label: ticker,
-              data: benchLabels.map((date) => map[date] ?? null),
+              data: benchLabels.map((date) => mapBenchmarkValue(map[date])),
               borderColor: BENCH_COLORS[ticker] ?? "#64748b",
               borderDash: [6, 3],
-              borderWidth: 2,
+              borderWidth: 2.2,
               pointRadius: 0,
+              pointHoverRadius: 4,
+              spanGaps: true,
               tension: 0.32,
             };
           }),
@@ -562,19 +821,8 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
                   <h2>Current Value</h2>
                 </div>
               </div>
-              <div className={styles.chartFrame}>
-                <Bar
-                  data={charts.balances}
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                      x: { ticks: { color: chartTheme.text }, grid: { display: false } },
-                      y: { ticks: { color: chartTheme.text }, grid: { color: chartTheme.grid } },
-                    },
-                  }}
-                />
+              <div className={`${styles.chartFrame} ${styles.valueFrame}`}>
+                <ValueRaceChart users={snapshot.users} />
               </div>
             </article>
             <article className={styles.panel}>
@@ -585,20 +833,11 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
                 </div>
               </div>
               <div className={styles.chartFrame}>
-                <Line
-                  data={charts.benchmark}
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { position: "bottom", labels: { boxWidth: 12, usePointStyle: true } } },
-                    scales: {
-                      x: { ticks: { color: chartTheme.text, maxTicksLimit: 8 }, grid: { color: chartTheme.grid } },
-                      y: {
-                        ticks: { color: chartTheme.text, callback: (v) => `${Number(v) >= 0 ? "+" : ""}${v}%` },
-                        grid: { color: chartTheme.grid },
-                      },
-                    },
-                  }}
+                <BenchmarkComparisonChart
+                  labels={charts.benchmark.labels}
+                  datasets={charts.benchmark.datasets}
+                  axisBreak={charts.benchmarkAxisBreak}
+                  axisScale={charts.benchmarkAxisScale}
                 />
               </div>
             </article>
