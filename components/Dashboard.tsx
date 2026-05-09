@@ -14,17 +14,17 @@ import {
 } from "chart.js";
 import { Bar, Line } from "react-chartjs-2";
 
-import type { SeriesPoint, SnapshotResponse } from "@/lib/types";
+import type { SeriesPoint, SnapshotResponse, SnapshotUser } from "@/lib/types";
 
 import styles from "./dashboard.module.css";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Tooltip, Legend);
 
-const COLORS = ["#ef4444", "#a855f7", "#14b8a6", "#f97316", "#eab308", "#ec4899", "#06b6d4", "#2563eb"];
+const COLORS = ["#00a66a", "#2364aa", "#9b5de5", "#f15bb5", "#00b4d8", "#f59f00", "#64748b", "#ef4444"];
 const BENCH_COLORS: Record<string, string> = {
-  SPY: "#2563eb",
-  VT: "#22c55e",
-  VTI: "#f59e0b",
+  SPY: "#2364aa",
+  VT: "#00a66a",
+  VTI: "#f59f00",
 };
 
 const MAX_AUTO_RETRY_MS = 420000;
@@ -57,25 +57,113 @@ function formatPct(value: number): string {
   return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
 }
 
+function formatCurrency(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "Unavailable";
+  return value.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatPrice(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "Unavailable";
+  return value.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: value >= 1000 ? 2 : 4,
+  });
+}
+
+function formatShares(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "Unavailable";
+  return value.toLocaleString(undefined, { maximumFractionDigits: 4 });
+}
+
+function trendClass(value: number) {
+  return value >= 0 ? styles.positive : styles.negative;
+}
+
+function rankLabel(index: number) {
+  if (index === 0) return "First";
+  if (index === 1) return "Second";
+  if (index === 2) return "Third";
+  return `${index + 1}`;
+}
+
+function HoldingRow({ user, index }: { user: SnapshotUser; index: number }) {
+  return (
+    <tr>
+      <td>
+        <div className={styles.symbolCell}>
+          <span className={styles.symbolBadge}>{user.ticker.slice(0, 2)}</span>
+          <div>
+            <strong>{user.ticker}</strong>
+            <span>{user.name}</span>
+          </div>
+        </div>
+      </td>
+      <td>{formatShares(user.shares)}</td>
+      <td>{formatPrice(user.latest_price)}</td>
+      <td>{formatCurrency(user.balance)}</td>
+      <td className={trendClass(user.ytd_return)}>
+        {formatPct(user.ytd_return)}
+        <span className={styles.rankHint}>{rankLabel(index)}</span>
+      </td>
+    </tr>
+  );
+}
+
+function LoadingSkeleton({ message, subtitle, isError, onRetry }: {
+  message: string;
+  subtitle: string;
+  isError: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <main className={styles.main}>
+      <section className={`${styles.statePanel} ${isError ? styles.errorState : ""}`}>
+        <div>
+          <span className={styles.kicker}>{isError ? "Market data issue" : "Loading market data"}</span>
+          <h2>{message}</h2>
+          <p>{subtitle}</p>
+          {isError ? (
+            <button onClick={onRetry} className={styles.primaryButton}>
+              Retry snapshot
+            </button>
+          ) : null}
+        </div>
+        <div className={styles.skeletonStack} aria-hidden="true">
+          <span />
+          <span />
+          <span />
+          <span />
+        </div>
+      </section>
+    </main>
+  );
+}
+
 export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
   const [state, setState] = useState<LoadState>("loading");
   const [snapshot, setSnapshot] = useState<SnapshotResponse | null>(null);
-  const [message, setMessage] = useState("Fetching latest stock data...");
-  const [subtitle, setSubtitle] = useState("Preparing market snapshots and chart histories.");
+  const [message, setMessage] = useState("Fetching latest stock data");
+  const [subtitle, setSubtitle] = useState("Preparing live quotes, rankings, and chart histories.");
   const [chartTheme, setChartTheme] = useState<ChartTheme>({ text: "#334155", grid: "#e2e8f0" });
   const [selectedYtdKeys, setSelectedYtdKeys] = useState<string[]>([]);
-  const selectedYtdKeysLength = selectedYtdKeys.length;
   const retryCount = useRef(0);
   const startedAt = useRef<number | null>(null);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inFlight = useRef(false);
 
-  const clearRetryTimer = () => {
+  const clearRetryTimer = useCallback(() => {
     if (retryTimer.current) {
       clearTimeout(retryTimer.current);
       retryTimer.current = null;
     }
-  };
+  }, []);
 
   const fetchSnapshot = useCallback(async (forceRefresh = false) => {
     if (inFlight.current) return;
@@ -93,13 +181,13 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
         if (elapsed >= MAX_AUTO_RETRY_MS) {
           setState("error");
           setMessage("Still warming up backend cache");
-          setSubtitle("Auto-retry paused after 3 minutes. Please retry manually.");
+          setSubtitle("Auto-retry paused after 7 minutes. Refresh manually to try again.");
           return;
         }
         retryCount.current += 1;
         const delay = Math.min(10000 + retryCount.current * 5000, MAX_RETRY_DELAY_MS);
         setState("loading");
-        setMessage("Building initial cache...");
+        setMessage("Building initial cache");
         setSubtitle(`Auto-retrying in ${Math.round(delay / 1000)} seconds.`);
         retryTimer.current = setTimeout(() => void fetchSnapshot(false), delay);
         return;
@@ -109,25 +197,23 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
       retryCount.current = 0;
       setSnapshot(data);
       setState("ready");
-
-      if (selectedYtdKeysLength === 0 && data.users.length > 0) {
-        // Default only the current leader, per requirement.
-        const leader = data.users[0];
-        setSelectedYtdKeys([`user:${leader.ticker}`]);
-      }
-    } catch (error) {
+      setSelectedYtdKeys((current) => {
+        if (current.length > 0 || data.users.length === 0) return current;
+        return [`user:${data.users[0].ticker}`];
+      });
+    } catch {
       setState("error");
       setMessage("Unable to load market data");
-      setSubtitle("Please retry. If this continues, check API key and provider limits.");
+      setSubtitle("Retry the snapshot. If this continues, Yahoo Finance may be rate-limiting requests.");
     } finally {
       inFlight.current = false;
     }
-  }, [selectedYtdKeysLength]);
+  }, [clearRetryTimer]);
 
   useEffect(() => {
     void fetchSnapshot(false);
     return () => clearRetryTimer();
-  }, [fetchSnapshot]);
+  }, [clearRetryTimer, fetchSnapshot]);
 
   useEffect(() => {
     const applyTheme = () => {
@@ -144,18 +230,19 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
   const charts = useMemo(() => {
     if (!snapshot) return null;
     const userTickers = snapshot.users.map((user) => user.ticker);
-    const chartTickers = [...userTickers, "SPY", "VT", "VTI"];
+    const benchmarkTickers = snapshot.benchmarks.map((item) => item.ticker);
+    const chartTickers = [...userTickers, ...benchmarkTickers];
     const ytdOptions = [
       ...snapshot.users.map((user) => ({
         key: `user:${user.ticker}`,
         ticker: user.ticker,
-        label: `${user.name} ($${user.ticker})`,
+        label: `${user.name} (${user.ticker})`,
         isBenchmark: false,
       })),
-      ...["SPY", "VT", "VTI"].map((ticker) => ({
+      ...benchmarkTickers.map((ticker) => ({
         key: `benchmark:${ticker}`,
         ticker,
-        label: `$${ticker}`,
+        label: ticker,
         isBenchmark: true,
       })),
     ];
@@ -170,20 +257,20 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
       const ticker = option.ticker;
       const points = snapshot.histories[ticker] ?? [];
       const map = Object.fromEntries(points.map((point) => [point.date, point.value]));
-      const color = option.isBenchmark ? BENCH_COLORS[ticker] : COLORS[index % COLORS.length];
+      const color = option.isBenchmark ? BENCH_COLORS[ticker] ?? "#64748b" : COLORS[index % COLORS.length];
       return {
         label: option.label,
         data: ytdDates.map((date) => map[date] ?? null),
         borderColor: color,
-        borderWidth: option.isBenchmark ? 2.6 : 1.8,
+        borderWidth: option.isBenchmark ? 2.6 : 2,
         borderDash: option.isBenchmark ? [8, 4] : undefined,
         pointRadius: 0,
-        tension: 0.3,
+        tension: 0.32,
       };
     });
 
     const benchDates = new Set<string>();
-    for (const ticker of ["SPY", "VT", "VTI"]) {
+    for (const ticker of benchmarkTickers) {
       for (const point of snapshot.histories[ticker] ?? []) benchDates.add(point.date);
     }
     for (const point of snapshot.group_avg_history) benchDates.add(point.date);
@@ -203,11 +290,12 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
         labels: snapshot.users.map((user) => user.name),
         datasets: [
           {
-            label: "Balance ($)",
+            label: "Balance",
             data: snapshot.users.map((user) => user.balance),
-            borderWidth: 1.4,
-            borderColor: snapshot.users.map((user) => (user.ytd_return >= 0 ? "#16a34a" : "#dc2626")),
-            backgroundColor: snapshot.users.map((user) => (user.ytd_return >= 0 ? "#16a34a22" : "#dc262622")),
+            borderWidth: 1,
+            borderColor: snapshot.users.map((user) => (user.ytd_return >= 0 ? "#00a66a" : "#d92d20")),
+            backgroundColor: snapshot.users.map((user) => (user.ytd_return >= 0 ? "#00a66a33" : "#d92d2033")),
+            borderRadius: 8,
           },
         ],
       },
@@ -217,29 +305,29 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
           {
             label: "Group Average",
             data: benchLabels.map((date) => groupMap[date] ?? null),
-            borderColor: "#7c3aed",
-            borderWidth: 2.4,
+            borderColor: "#00a66a",
+            borderWidth: 2.6,
             pointRadius: 0,
-            tension: 0.3,
+            tension: 0.32,
           },
           {
-            label: "Filtered Avg (excl COIN, HOOD, SOFI)",
+            label: "Filtered Average",
             data: benchLabels.map((date) => filteredMap[date] ?? null),
-            borderColor: "#db2777",
+            borderColor: "#2364aa",
             borderWidth: 2.4,
             pointRadius: 0,
-            tension: 0.3,
+            tension: 0.32,
           },
-          ...["SPY", "VT", "VTI"].map((ticker) => {
+          ...benchmarkTickers.map((ticker) => {
             const map = buildMapped(snapshot.histories[ticker] ?? []);
             return {
-              label: `$${ticker}`,
+              label: ticker,
               data: benchLabels.map((date) => map[date] ?? null),
-              borderColor: BENCH_COLORS[ticker],
+              borderColor: BENCH_COLORS[ticker] ?? "#64748b",
               borderDash: [6, 3],
               borderWidth: 2,
               pointRadius: 0,
-              tension: 0.3,
+              tension: 0.32,
             };
           }),
         ],
@@ -253,6 +341,10 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
     );
   };
 
+  const leader = snapshot?.users[0] ?? null;
+  const quoteFailures = snapshot?.quote_failures ?? [];
+  const stats = snapshot?.fetch_stats;
+
   return (
     <div className={styles.page}>
       <header className={styles.header}>
@@ -260,127 +352,216 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
           <Image src="/logo-mark.svg" alt="Stock Competition logo" className={styles.logo} width={40} height={40} priority />
           <div>
             <h1>Stock Competition</h1>
+            <p>Live ranking dashboard</p>
           </div>
         </div>
         <div className={styles.headerActions}>
           {snapshot ? <span className={styles.updatedAt}>Updated {snapshot.updated_at}</span> : null}
           {githubRepoUrl ? (
-            <a href={githubRepoUrl} target="_blank" rel="noreferrer" className={styles.githubButton}>
-              GitHub Repo
+            <a href={githubRepoUrl} target="_blank" rel="noreferrer" className={styles.secondaryButton}>
+              GitHub
             </a>
           ) : null}
-          <button onClick={() => void fetchSnapshot(true)} className={styles.refreshButton}>
+          <button onClick={() => void fetchSnapshot(true)} className={styles.primaryButton}>
             Refresh
           </button>
         </div>
       </header>
 
-      {state !== "ready" || !snapshot || !charts ? (
-        <section className={styles.loadingCard}>
-          <h2>{message}</h2>
-          <p>{subtitle}</p>
-          {state === "error" ? (
-            <button onClick={() => void fetchSnapshot(true)} className={styles.retryButton}>
-              Retry
-            </button>
-          ) : null}
-        </section>
+      {state !== "ready" || !snapshot || !charts || !leader ? (
+        <LoadingSkeleton
+          message={message}
+          subtitle={subtitle}
+          isError={state === "error"}
+          onRetry={() => void fetchSnapshot(true)}
+        />
       ) : (
         <main className={styles.main}>
-          <section className={styles.cards}>
-            {[
-              { label: "Group Avg", value: snapshot.group_avg, sub: "All picks averaged" },
-              { label: "Filtered Avg", value: snapshot.filtered_avg, sub: "Excludes COIN, HOOD & SOFI" },
-              ...snapshot.benchmarks.map((item) => ({
-                label: `$${item.ticker}`,
-                value: item.ytd_return,
-                sub: `Balance: $${item.balance.toLocaleString()}`,
-              })),
-            ].map((item) => (
-              <article key={item.label} className={styles.metricCard}>
-                <span>{item.label}</span>
-                <strong className={item.value >= 0 ? styles.positive : styles.negative}>{formatPct(item.value)}</strong>
-                <small>{item.sub}</small>
+          <section className={styles.heroGrid} aria-label="Competition summary">
+            <article className={`${styles.heroCard} ${leader.ytd_return >= 0 ? styles.heroPositive : styles.heroNegative}`}>
+              <div>
+                <span className={styles.kicker}>Current leader</span>
+                <h2>{leader.name}</h2>
+                <p>
+                  {leader.ticker} leads with a {formatPct(leader.ytd_return)} return from the official Dec. 31, 2025
+                  baseline.
+                </p>
+              </div>
+              <div className={styles.heroValue}>
+                <strong>{formatCurrency(leader.balance)}</strong>
+                <span className={trendClass(leader.ytd_return)}>{formatPct(leader.ytd_return)}</span>
+              </div>
+            </article>
+
+            <article className={styles.metricCard}>
+              <span>Group average</span>
+              <strong className={trendClass(snapshot.group_avg)}>{formatPct(snapshot.group_avg)}</strong>
+              <small>All submitted picks</small>
+            </article>
+            <article className={styles.metricCard}>
+              <span>Filtered average</span>
+              <strong className={trendClass(snapshot.filtered_avg)}>{formatPct(snapshot.filtered_avg)}</strong>
+              <small>Excludes crypto-adjacent picks</small>
+            </article>
+            {snapshot.benchmarks.map((item) => (
+              <article key={item.ticker} className={styles.metricCard}>
+                <span>{item.ticker}</span>
+                <strong className={trendClass(item.ytd_return)}>{formatPct(item.ytd_return)}</strong>
+                <small>{formatCurrency(item.balance)}</small>
               </article>
             ))}
           </section>
 
+          <section className={`${styles.statusBanner} ${quoteFailures.length > 0 ? styles.warningBanner : ""}`}>
+            <div>
+              <strong>{quoteFailures.length > 0 ? "Some quotes need attention" : "Quotes refreshed from batched Yahoo data"}</strong>
+              <span>
+                {quoteFailures.length > 0
+                  ? `Missing latest quote for ${quoteFailures.join(", ")}. Rankings use available history where possible.`
+                  : "Latest prices may include regular, pre-market, or after-hours quotes when Yahoo provides them."}
+              </span>
+            </div>
+            {stats ? (
+              <dl className={styles.statsStrip}>
+                <div>
+                  <dt>API calls</dt>
+                  <dd>
+                    {stats.actualApiCalls} / {stats.estimatedPreviousApiCalls}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Quote batches</dt>
+                  <dd>{stats.quoteApiCalls}</dd>
+                </div>
+                <div>
+                  <dt>Fetch time</dt>
+                  <dd>{stats.durationMs}ms</dd>
+                </div>
+              </dl>
+            ) : null}
+          </section>
+
+          <section className={styles.contentGrid}>
+            <article className={`${styles.panel} ${styles.leaderboardPanel}`}>
+              <div className={styles.panelHeader}>
+                <div>
+                  <span className={styles.kicker}>Rankings</span>
+                  <h2>Leaderboard</h2>
+                </div>
+                <span className={styles.pill}>{snapshot.users.length} picks</span>
+              </div>
+              <div className={styles.tableFrame}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Rank</th>
+                      <th>Participant</th>
+                      <th>Ticker</th>
+                      <th>Return</th>
+                      <th>Balance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {snapshot.users.map((user, index) => (
+                      <tr key={user.name}>
+                        <td>
+                          <span className={styles.rankBadge}>{index + 1}</span>
+                        </td>
+                        <td>
+                          <strong>{user.name}</strong>
+                          {user.crypto_adjacent ? <span className={styles.subtleText}>Crypto-adjacent</span> : null}
+                        </td>
+                        <td>{user.ticker}</td>
+                        <td className={trendClass(user.ytd_return)}>{formatPct(user.ytd_return)}</td>
+                        <td>{formatCurrency(user.balance)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </article>
+
+            <article className={`${styles.panel} ${styles.holdingsPanel}`}>
+              <div className={styles.panelHeader}>
+                <div>
+                  <span className={styles.kicker}>Holdings</span>
+                  <h2>Live Stock Rows</h2>
+                </div>
+                <span className={styles.pill}>Dec. 31 baseline</span>
+              </div>
+              <div className={styles.tableFrame}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Symbol</th>
+                      <th>Qty</th>
+                      <th>Price</th>
+                      <th>Value</th>
+                      <th>Return</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {snapshot.users.map((user, index) => (
+                      <HoldingRow key={`${user.name}-${user.ticker}`} user={user} index={index} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </article>
+          </section>
+
           <section className={styles.panel}>
-            <h2>Leaderboard</h2>
-            <table>
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>User</th>
-                  <th>Ticker</th>
-                  <th>YTD</th>
-                  <th>Balance</th>
-                </tr>
-              </thead>
-              <tbody>
-                {snapshot.users.map((user, index) => (
-                  <tr key={user.name}>
-                    <td>{index + 1}</td>
-                    <td>{user.name}</td>
-                    <td>
-                      ${user.ticker}
-                      {user.crypto_adjacent ? <span className={styles.badge}>Crypto-adj</span> : null}
-                    </td>
-                    <td className={user.ytd_return >= 0 ? styles.positive : styles.negative}>{formatPct(user.ytd_return)}</td>
-                    <td>${user.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className={styles.panelHeader}>
+              <div>
+                <span className={styles.kicker}>Performance</span>
+                <h2>YTD Comparison</h2>
+              </div>
+              <span className={styles.pill}>{selectedYtdKeys.length} selected</span>
+            </div>
+            {charts.ytdOptions.length > 0 ? (
+              <div className={styles.filterSection}>
+                {charts.ytdOptions.map((option) => {
+                  const checked = selectedYtdKeys.includes(option.key);
+                  return (
+                    <label key={option.key} className={styles.filterItem}>
+                      <input type="checkbox" checked={checked} onChange={() => toggleYtdKey(option.key)} />
+                      <span>{option.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            ) : null}
+            <div className={styles.chartFrame}>
+              {charts.ytd.datasets.length > 0 ? (
+                <Line
+                  data={charts.ytd}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: "bottom", labels: { boxWidth: 12, usePointStyle: true } } },
+                    scales: {
+                      x: { ticks: { color: chartTheme.text, maxTicksLimit: 8 }, grid: { color: chartTheme.grid } },
+                      y: {
+                        ticks: { color: chartTheme.text, callback: (v) => `${Number(v) >= 0 ? "+" : ""}${v}%` },
+                        grid: { color: chartTheme.grid },
+                      },
+                    },
+                  }}
+                />
+              ) : (
+                <div className={styles.emptyState}>Select at least one series to compare.</div>
+              )}
+            </div>
           </section>
 
           <section className={styles.chartGrid}>
             <article className={styles.panel}>
-              <h2>YTD Performance</h2>
-              {charts.ytdOptions.length > 0 ? (
-                <div className={styles.filterSection}>
-                  <p className={styles.filterLabel}>Compare series (users + benchmarks):</p>
-                  <div className={styles.filterGrid}>
-                    {charts.ytdOptions.map((option) => {
-                      const checked = selectedYtdKeys.includes(option.key);
-                      return (
-                        <label key={option.key} className={styles.filterItem}>
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleYtdKey(option.key)}
-                          />
-                          <span>{option.label}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
+              <div className={styles.panelHeader}>
+                <div>
+                  <span className={styles.kicker}>Balances</span>
+                  <h2>Current Value</h2>
                 </div>
-              ) : null}
-              <div className={styles.chartFrame}>
-                {charts.ytd.datasets.length > 0 ? (
-                  <Line
-                    data={charts.ytd}
-                    options={{
-                      responsive: true,
-                      maintainAspectRatio: false,
-                      plugins: { legend: { position: "bottom" } },
-                      scales: {
-                        x: { ticks: { color: chartTheme.text }, grid: { color: chartTheme.grid } },
-                        y: {
-                          ticks: { color: chartTheme.text, callback: (v) => `${Number(v) >= 0 ? "+" : ""}${v}%` },
-                          grid: { color: chartTheme.grid },
-                        },
-                      },
-                    }}
-                  />
-                ) : (
-                  <div className={styles.emptyState}>Select at least one series to compare.</div>
-                )}
               </div>
-            </article>
-            <article className={styles.panel}>
-              <h2>Current Balances</h2>
               <div className={styles.chartFrame}>
                 <Bar
                   data={charts.balances}
@@ -389,40 +570,44 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
                     maintainAspectRatio: false,
                     plugins: { legend: { display: false } },
                     scales: {
-                      x: { ticks: { color: chartTheme.text }, grid: { color: chartTheme.grid } },
+                      x: { ticks: { color: chartTheme.text }, grid: { display: false } },
                       y: { ticks: { color: chartTheme.text }, grid: { color: chartTheme.grid } },
                     },
                   }}
                 />
               </div>
             </article>
-          </section>
-
-          <section className={styles.panel}>
-            <h2>Group Average vs Benchmarks</h2>
-            <div className={styles.chartFrame}>
-              <Line
-                data={charts.benchmark}
-                options={{
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  plugins: { legend: { position: "bottom" } },
-                  scales: {
-                    x: { ticks: { color: chartTheme.text }, grid: { color: chartTheme.grid } },
-                    y: {
-                      ticks: { color: chartTheme.text, callback: (v) => `${Number(v) >= 0 ? "+" : ""}${v}%` },
-                      grid: { color: chartTheme.grid },
+            <article className={styles.panel}>
+              <div className={styles.panelHeader}>
+                <div>
+                  <span className={styles.kicker}>Benchmarks</span>
+                  <h2>Group vs Market</h2>
+                </div>
+              </div>
+              <div className={styles.chartFrame}>
+                <Line
+                  data={charts.benchmark}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: "bottom", labels: { boxWidth: 12, usePointStyle: true } } },
+                    scales: {
+                      x: { ticks: { color: chartTheme.text, maxTicksLimit: 8 }, grid: { color: chartTheme.grid } },
+                      y: {
+                        ticks: { color: chartTheme.text, callback: (v) => `${Number(v) >= 0 ? "+" : ""}${v}%` },
+                        grid: { color: chartTheme.grid },
+                      },
                     },
-                  },
-                }}
-              />
-            </div>
+                  }}
+                />
+              </div>
+            </article>
           </section>
         </main>
       )}
 
       <footer className={styles.footer}>
-        <span>Data provider: {snapshot?.data_provider ?? "Loading"}</span>
+        <span>{snapshot?.data_provider ?? "Loading market data"}</span>
       </footer>
     </div>
   );
