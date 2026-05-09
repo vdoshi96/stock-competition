@@ -19,14 +19,14 @@ import styles from "./dashboard.module.css";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
-const COLORS = ["#00a66a", "#2364aa", "#9b5de5", "#f15bb5", "#00b4d8", "#f59f00", "#64748b", "#ef4444"];
+const COLORS = ["#1266f1", "#009e73", "#4f46e5", "#0891b2", "#475569", "#f59e0b", "#ef4444", "#0f172a"];
 const BENCH_COLORS: Record<string, string> = {
-  SPY: "#2f80ed",
-  VT: "#14b8a6",
-  VTI: "#f59e0b",
+  SPY: "#ff6b1a",
+  VT: "#f4a800",
+  VTI: "#0f2e5c",
 };
-const GROUP_AVG_COLOR = "#00c781";
-const FILTERED_AVG_COLOR = "#a855f7";
+const GROUP_AVG_COLOR = "#6b7280";
+const FILTERED_AVG_COLOR = "#0ea5a8";
 
 type PercentAxisBreak = {
   from: number;
@@ -451,7 +451,8 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
       setState("ready");
       setSelectedYtdKeys((current) => {
         if (current.length > 0 || data.users.length === 0) return current;
-        return [`user:${data.users[0].ticker}`];
+        const defaults = [`user:${data.users[0].ticker}`, "average:group", "average:filtered"];
+        return data.benchmarks.some((item) => item.ticker === "SPY") ? [...defaults, "benchmark:SPY"] : defaults;
       });
     } catch {
       setState("error");
@@ -485,17 +486,33 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
     const benchmarkTickers = snapshot.benchmarks.map((item) => item.ticker);
     const chartTickers = [...userTickers, ...benchmarkTickers];
     const ytdOptions = [
-      ...snapshot.users.map((user) => ({
+      ...snapshot.users.map((user, index) => ({
         key: `user:${user.ticker}`,
         ticker: user.ticker,
         label: `${user.name} (${user.ticker})`,
-        isBenchmark: false,
+        color: COLORS[index % COLORS.length],
+        kind: "user" as const,
       })),
+      {
+        key: "average:group",
+        ticker: "Group Average",
+        label: "Group Average",
+        color: GROUP_AVG_COLOR,
+        kind: "group" as const,
+      },
+      {
+        key: "average:filtered",
+        ticker: "Filtered Average",
+        label: "Filtered Average",
+        color: FILTERED_AVG_COLOR,
+        kind: "filtered" as const,
+      },
       ...benchmarkTickers.map((ticker) => ({
         key: `benchmark:${ticker}`,
         ticker,
         label: ticker,
-        isBenchmark: true,
+        color: BENCH_COLORS[ticker] ?? "#64748b",
+        kind: "benchmark" as const,
       })),
     ];
 
@@ -503,20 +520,28 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
     const activeOptions = ytdOptions.filter((option) =>
       selectedKeysSet.size === 0 ? false : selectedKeysSet.has(option.key)
     );
-    const ytdDates = uniqueSortedDates(snapshot.histories, chartTickers);
+    const ytdDateSet = new Set(uniqueSortedDates(snapshot.histories, chartTickers));
+    for (const point of snapshot.group_avg_history) ytdDateSet.add(point.date);
+    for (const point of snapshot.filtered_avg_history) ytdDateSet.add(point.date);
+    const ytdDates = [...ytdDateSet].sort();
 
-    const ytdDatasets = activeOptions.map((option, index) => {
-      const ticker = option.ticker;
-      const points = snapshot.histories[ticker] ?? [];
+    const ytdDatasets = activeOptions.map((option) => {
+      const points =
+        option.kind === "group"
+          ? snapshot.group_avg_history
+          : option.kind === "filtered"
+            ? snapshot.filtered_avg_history
+            : snapshot.histories[option.ticker] ?? [];
       const map = Object.fromEntries(points.map((point) => [point.date, point.value]));
-      const color = option.isBenchmark ? BENCH_COLORS[ticker] ?? "#64748b" : COLORS[index % COLORS.length];
       return {
         label: option.label,
         data: ytdDates.map((date) => map[date] ?? null),
-        borderColor: color,
-        borderWidth: option.isBenchmark ? 2.6 : 2,
-        borderDash: option.isBenchmark ? [8, 4] : undefined,
+        borderColor: option.color,
+        borderWidth: option.kind === "benchmark" || option.kind === "group" || option.kind === "filtered" ? 2.6 : 2,
+        borderDash: option.kind === "benchmark" ? [8, 4] : undefined,
         pointRadius: 0,
+        pointHoverRadius: 4,
+        spanGaps: true,
         tension: 0.32,
       };
     });
@@ -730,7 +755,12 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
                           <strong>{user.name}</strong>
                           {user.crypto_adjacent ? <span className={styles.subtleText}>Crypto-adjacent</span> : null}
                         </td>
-                        <td data-label="Ticker">{user.ticker}</td>
+                        <td data-label="Ticker">
+                          <div className={styles.symbolCell}>
+                            <TickerLogo ticker={user.ticker} />
+                            <strong>{user.ticker}</strong>
+                          </div>
+                        </td>
                         <td data-label="Return" className={trendClass(user.ytd_return)}>{formatPct(user.ytd_return)}</td>
                         <td data-label="Balance">{formatCurrency(user.balance)}</td>
                       </tr>

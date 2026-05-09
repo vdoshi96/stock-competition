@@ -8,40 +8,42 @@
   top: 0;
   z-index: 10;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 18px;
-  padding: 14px 28px;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px 28px;
   border-bottom: 1px solid var(--header-border);
   background: var(--header-bg);
-  backdrop-filter: blur(16px);
+  backdrop-filter: blur(18px);
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 13px;
   min-width: 0;
 }
 
 .brand h1 {
   margin: 0;
-  font-size: 1rem;
+  color: var(--text-main);
+  font-size: 1.08rem;
   line-height: 1.1;
   letter-spacing: 0;
 }
 
 .brand p {
   margin: 3px 0 0;
-  font-size: 0.78rem;
   color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.2;
 }
 
 .logo {
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 166, 106, 0.16);
+  box-shadow: 0 12px 28px rgba(18, 102, 241, 0.2);
 }
 
 .headerActions {
@@ -64,11 +66,12 @@
   align-items: center;
   justify-content: center;
   min-height: 38px;
+  border: 1px solid var(--button-border);
   border-radius: 8px;
   padding: 9px 14px;
-  border: 1px solid var(--button-border);
-  font-weight: 700;
   font-size: 0.84rem;
+  font-weight: 800;
+  line-height: 1;
   text-decoration: none;
   cursor: pointer;
   transition: transform 160ms ease, background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
@@ -77,7 +80,7 @@
 .primaryButton {
   color: var(--button-text);
   background: var(--button-bg);
-  box-shadow: 0 10px 22px rgba(0, 166, 106, 0.22);
+  box-shadow: 0 12px 22px rgba(18, 102, 241, 0.22);
 }
 
 .secondaryButton {
@@ -92,17 +95,17 @@
 }
 
 .main {
-  width: min(1440px, 100%);
+  width: min(1510px, 100%);
   margin: 0 auto;
-  padding: 26px 28px 34px;
+  padding: 24px 28px 34px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
 }
 
 .heroGrid {
   display: grid;
-  grid-template-columns: minmax(460px, 1.8fr) repeat(5, minmax(120px, 1fr));
+  grid-template-columns: minmax(250px, 1.55fr) repeat(5, minmax(118px, 1fr));
   gap: 12px;
 }
 
@@ -111,60 +114,74 @@
 .panel,
 .statePanel,
 .statusBanner {
-  background: var(--surface);
   border: 1px solid var(--surface-border);
   border-radius: 8px;
+  background: var(--surface);
   box-shadow: var(--surface-shadow);
 }
 
 .heroCard {
-  min-height: 198px;
-  padding: 24px;
+  min-height: 148px;
+  padding: 20px;
   display: flex;
+  align-items: stretch;
   justify-content: space-between;
-  gap: 24px;
+  gap: 20px;
   overflow: hidden;
   position: relative;
+  color: #eef6ff;
+  background:
+    linear-gradient(135deg, rgba(18, 102, 241, 0.36), rgba(18, 102, 241, 0) 46%),
+    linear-gradient(145deg, #071427, #0a2a58 72%, #04101f);
+  border-color: #14376c;
+  box-shadow: 0 20px 50px rgba(6, 20, 42, 0.18);
 }
 
 .heroCard::after {
   content: "";
   position: absolute;
-  inset: auto 18px 16px auto;
-  width: 120px;
-  height: 54px;
-  border-bottom: 3px solid currentColor;
-  border-right: 3px solid currentColor;
-  transform: skewX(-24deg);
-  opacity: 0.08;
+  right: -26px;
+  bottom: -34px;
+  width: 138px;
+  height: 98px;
+  border: 3px solid rgba(180, 211, 255, 0.16);
+  border-left: 0;
+  border-bottom: 0;
+  transform: skewX(-20deg);
 }
 
 .heroPositive {
-  color: var(--positive);
+  --hero-accent: #5ef0b1;
 }
 
 .heroNegative {
-  color: var(--negative);
+  --hero-accent: #ff9a91;
 }
 
 .heroCard h2,
 .statePanel h2,
 .panel h2 {
-  color: var(--text-main);
   margin: 0;
+  color: var(--text-main);
 }
 
 .heroCard h2 {
-  font-size: clamp(2rem, 4vw, 3.6rem);
+  margin-top: 8px;
+  color: #ffffff;
+  font-size: clamp(1.9rem, 3.2vw, 3rem);
   line-height: 0.95;
-  margin-top: 10px;
 }
 
 .heroCard p {
-  max-width: 520px;
-  margin: 14px 0 0;
-  color: var(--text-muted);
-  line-height: 1.6;
+  max-width: 500px;
+  margin: 12px 0 0;
+  color: #cfe0f7;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.heroCard .kicker {
+  color: #dbeafe;
 }
 
 .heroValue {
@@ -174,111 +191,140 @@
   flex-direction: column;
   align-items: flex-end;
   justify-content: flex-end;
-  gap: 8px;
-  min-width: 160px;
+  gap: 7px;
+  min-width: 130px;
 }
 
 .heroValue strong {
-  color: var(--text-main);
-  font-size: clamp(1.5rem, 2.2vw, 2.25rem);
+  color: #ffffff;
+  font-size: clamp(1.22rem, 1.8vw, 1.65rem);
   line-height: 1;
   white-space: nowrap;
 }
 
 .heroValue span {
-  font-size: 1.05rem;
-  font-weight: 800;
+  color: var(--hero-accent);
+  font-size: 1.28rem;
+  font-weight: 900;
+  letter-spacing: 0;
 }
 
 .metricCard {
-  min-height: 120px;
-  padding: 16px;
+  min-height: 126px;
+  padding: 17px 16px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
 }
 
 .metricCard span,
 .kicker {
   color: var(--text-muted);
   font-size: 0.68rem;
-  font-weight: 800;
+  font-weight: 850;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
 }
 
 .metricCard strong {
-  font-size: 1.55rem;
+  font-size: clamp(1.35rem, 1.8vw, 1.68rem);
   line-height: 1;
 }
 
 .metricCard small {
-  color: var(--text-muted);
+  color: var(--text-main);
+  font-size: 0.82rem;
   line-height: 1.35;
 }
 
 .statusBanner {
-  padding: 16px;
   display: grid;
   grid-template-columns: minmax(260px, 1fr) auto;
-  gap: 18px;
   align-items: center;
-  border-left: 4px solid var(--positive);
+  gap: 18px;
+  padding: 15px 16px;
+  box-shadow: none;
 }
 
-.warningBanner {
-  border-left-color: var(--warning);
+.statusBanner > div:first-child {
+  position: relative;
+  padding-left: 24px;
+}
+
+.statusBanner > div:first-child::before {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--positive);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--positive) 14%, transparent);
+}
+
+.warningBanner > div:first-child::before {
+  background: var(--warning);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--warning) 16%, transparent);
 }
 
 .statusBanner strong {
   display: block;
   margin-bottom: 4px;
+  font-size: 0.92rem;
 }
 
 .statusBanner span {
   color: var(--text-muted);
-  font-size: 0.88rem;
+  font-size: 0.82rem;
   line-height: 1.5;
 }
 
 .statsStrip {
   display: grid;
-  grid-template-columns: repeat(3, minmax(92px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(3, minmax(90px, 1fr));
+  gap: 0;
   margin: 0;
+  border-left: 1px solid var(--surface-border);
 }
 
 .statsStrip div {
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: var(--muted-surface);
-  border: 1px solid var(--surface-border);
+  min-width: 104px;
+  padding: 5px 16px;
+  border-right: 1px solid var(--surface-border);
+}
+
+.statsStrip div:last-child {
+  border-right: 0;
 }
 
 .statsStrip dt {
-  color: var(--text-muted);
-  font-size: 0.68rem;
-  text-transform: uppercase;
-  font-weight: 800;
   margin-bottom: 4px;
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .statsStrip dd {
   margin: 0;
-  font-weight: 800;
+  color: var(--text-main);
+  font-size: 0.9rem;
+  font-weight: 850;
 }
 
 .contentGrid {
   display: grid;
   grid-template-columns: minmax(360px, 1fr) minmax(360px, 1fr);
-  gap: 18px;
+  gap: 16px;
   align-items: start;
 }
 
 .panel {
-  padding: 18px;
   min-width: 0;
+  padding: 18px;
 }
 
 .panelHeader {
@@ -291,7 +337,8 @@
 
 .panelHeader h2 {
   margin-top: 4px;
-  font-size: 1.1rem;
+  font-size: 1.12rem;
+  line-height: 1.15;
 }
 
 .pill {
@@ -305,7 +352,7 @@
   color: var(--text-muted);
   background: var(--muted-surface);
   font-size: 0.74rem;
-  font-weight: 700;
+  font-weight: 750;
   white-space: nowrap;
 }
 
@@ -316,16 +363,18 @@
 
 .panel table {
   width: 100%;
-  min-width: 580px;
+  min-width: 610px;
   border-collapse: collapse;
 }
 
 .panel th,
 .panel td {
-  text-align: left;
-  border-bottom: 1px solid var(--surface-border);
   padding: 12px 10px;
-  font-size: 0.88rem;
+  border-bottom: 1px solid var(--surface-border);
+  color: var(--text-main);
+  font-size: 0.86rem;
+  line-height: 1.25;
+  text-align: left;
   vertical-align: middle;
 }
 
@@ -334,10 +383,10 @@
   top: 0;
   color: var(--text-muted);
   background: var(--table-head-bg);
+  font-size: 0.66rem;
+  font-weight: 850;
   text-transform: uppercase;
-  font-size: 0.68rem;
   letter-spacing: 0.05em;
-  font-weight: 800;
 }
 
 .panel tr:last-child td {
@@ -352,9 +401,9 @@
 .symbolOwner,
 .rankHint {
   display: block;
-  color: var(--text-muted);
-  font-size: 0.72rem;
   margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 0.7rem;
 }
 
 .rankBadge {
@@ -366,13 +415,15 @@
   border-radius: 8px;
   background: var(--rank-bg);
   color: var(--rank-text);
-  font-weight: 800;
+  font-size: 0.78rem;
+  font-weight: 900;
 }
 
 .symbolCell {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
 }
 
 .symbolCell .symbolBadge {
@@ -383,18 +434,17 @@
   width: 34px;
   height: 34px;
   padding: 4px;
+  border: 1px solid rgba(118, 160, 220, 0.32);
   border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--positive) 28%, var(--surface-border));
+  overflow: hidden;
+  color: var(--symbol-text);
   background:
-    radial-gradient(circle at 30% 20%, rgba(0, 199, 129, 0.18), transparent 44%),
-    #0a1410;
-  color: #eef7f2;
+    radial-gradient(circle at 28% 20%, rgba(18, 102, 241, 0.34), transparent 42%),
+    linear-gradient(145deg, #081528, #031021);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 8px 18px rgba(7, 20, 39, 0.18);
   font-size: 0.72rem;
   font-weight: 900;
   line-height: 1;
-  margin-top: 0;
-  overflow: hidden;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 8px 18px rgba(0, 0, 0, 0.18);
 }
 
 .symbolLogo {
@@ -415,12 +465,12 @@
 
 .positive {
   color: var(--positive);
-  font-weight: 800;
+  font-weight: 850;
 }
 
 .negative {
   color: var(--negative);
-  font-weight: 800;
+  font-weight: 850;
 }
 
 .filterSection {
@@ -439,33 +489,40 @@
   border: 1px solid var(--surface-border);
   border-radius: 8px;
   color: var(--text-main);
-  background: var(--muted-surface);
-  font-size: 0.82rem;
+  background: var(--surface);
+  font-size: 0.8rem;
+  font-weight: 650;
   cursor: pointer;
-  transition: border-color 160ms ease, background 160ms ease;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
 }
 
-.filterItem:hover {
-  border-color: var(--positive);
+.filterItem:hover,
+.filterItem:has(input:checked) {
+  border-color: color-mix(in srgb, var(--button-bg) 44%, var(--surface-border));
+  background: color-mix(in srgb, var(--button-bg) 6%, var(--surface));
+}
+
+.filterItem:has(input:focus-visible) {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--button-bg) 18%, transparent);
 }
 
 .filterItem input {
   width: 14px;
   height: 14px;
-  accent-color: var(--positive);
+  accent-color: var(--button-bg);
 }
 
 .chartGrid {
   display: grid;
-  gap: 18px;
   grid-template-columns: repeat(2, minmax(320px, 1fr));
+  gap: 16px;
 }
 
 .chartFrame {
   position: relative;
+  width: 100%;
   height: 340px;
   min-height: 340px;
-  width: 100%;
   overflow: hidden;
 }
 
@@ -474,21 +531,19 @@
   display: grid;
   align-content: start;
   gap: 10px;
-  overflow-y: auto;
   padding-right: 4px;
+  overflow-y: auto;
 }
 
 .valueRaceRow {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr);
-  gap: 10px;
   align-items: center;
+  gap: 10px;
   padding: 10px;
   border: 1px solid var(--surface-border);
   border-radius: 8px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0)),
-    var(--muted-surface);
+  background: var(--muted-surface);
 }
 
 .valueRaceRank {
@@ -498,8 +553,8 @@
   width: 30px;
   height: 30px;
   border-radius: 8px;
-  background: var(--rank-bg);
   color: var(--rank-text);
+  background: var(--rank-bg);
   font-size: 0.78rem;
   font-weight: 900;
 }
@@ -510,9 +565,9 @@
 
 .valueRaceTopline {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
-  align-items: flex-start;
 }
 
 .valueRaceTopline strong,
@@ -521,13 +576,13 @@
 }
 
 .valueRaceTopline strong {
-  font-size: 0.9rem;
+  font-size: 0.88rem;
 }
 
 .valueRaceTopline span {
   margin-top: 2px;
   color: var(--text-muted);
-  font-size: 0.74rem;
+  font-size: 0.72rem;
 }
 
 .valueRaceTopline > div:last-child {
@@ -538,7 +593,7 @@
   height: 8px;
   margin-top: 10px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--surface-border) 70%, transparent);
+  background: color-mix(in srgb, var(--surface-border) 68%, transparent);
   overflow: hidden;
 }
 
@@ -549,13 +604,11 @@
 }
 
 .valueTrackPositive {
-  background: linear-gradient(90deg, rgba(0, 199, 129, 0.55), #00c781);
-  box-shadow: 0 0 18px rgba(0, 199, 129, 0.22);
+  background: linear-gradient(90deg, rgba(0, 158, 115, 0.58), #00b982);
 }
 
 .valueTrackNegative {
-  background: linear-gradient(90deg, rgba(217, 45, 32, 0.45), #ff5a4f);
-  box-shadow: 0 0 18px rgba(217, 45, 32, 0.18);
+  background: linear-gradient(90deg, rgba(217, 45, 32, 0.48), #ff5a4f);
 }
 
 .benchmarkChart {
@@ -610,7 +663,7 @@
   gap: 10px 14px;
   color: var(--text-main);
   font-size: 0.78rem;
-  font-weight: 700;
+  font-weight: 750;
 }
 
 .benchmarkLegend span {
@@ -631,22 +684,24 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-muted);
   border: 1px dashed var(--surface-border);
   border-radius: 8px;
+  color: var(--text-muted);
+  background: var(--muted-surface);
 }
 
 .statePanel {
   display: grid;
   grid-template-columns: minmax(260px, 1fr) minmax(220px, 360px);
-  gap: 28px;
   align-items: center;
+  gap: 28px;
   padding: 28px;
 }
 
 .statePanel h2 {
   margin: 8px 0;
   font-size: clamp(1.6rem, 3vw, 2.5rem);
+  line-height: 1.05;
 }
 
 .statePanel p {
@@ -656,7 +711,7 @@
 }
 
 .errorState {
-  border-left: 4px solid var(--negative);
+  border-color: color-mix(in srgb, var(--negative) 36%, var(--surface-border));
 }
 
 .skeletonStack {
@@ -702,7 +757,7 @@
   }
 }
 
-@media (max-width: 1180px) {
+@media (max-width: 1380px) {
   .heroGrid {
     grid-template-columns: repeat(3, minmax(180px, 1fr));
   }
@@ -720,7 +775,9 @@
   }
 
   .headerActions {
-    width: 100%;
+    align-self: stretch;
+    width: auto;
+    max-width: calc(100vw - 36px);
     justify-content: flex-start;
   }
 
@@ -748,6 +805,14 @@
 
   .statsStrip {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+    border-left: 0;
+    border-top: 1px solid var(--surface-border);
+    padding-top: 12px;
+  }
+
+  .statsStrip div:first-child {
+    padding-left: 0;
   }
 }
 
@@ -758,10 +823,13 @@
 
   .main {
     padding: 14px;
+    gap: 14px;
   }
 
   .headerActions {
     gap: 8px;
+    width: calc(100vw - 36px);
+    max-width: calc(100vw - 36px);
   }
 
   .primaryButton,
@@ -778,11 +846,21 @@
   }
 
   .metricCard {
-    min-height: 104px;
+    min-height: 100px;
   }
 
   .statsStrip {
     grid-template-columns: 1fr;
+  }
+
+  .statsStrip div {
+    padding: 9px 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--surface-border);
+  }
+
+  .statsStrip div:last-child {
+    border-bottom: 0;
   }
 
   .chartFrame {
@@ -819,7 +897,7 @@
 
   .panel td {
     display: grid;
-    grid-template-columns: minmax(96px, 0.42fr) minmax(0, 1fr);
+    grid-template-columns: minmax(90px, 0.4fr) minmax(0, 1fr);
     gap: 10px;
     align-items: center;
     padding: 0;
@@ -837,19 +915,20 @@
     text-transform: uppercase;
   }
 
-  .symbolCell {
-    min-width: 0;
-  }
-
   .symbolCell strong,
   .symbolOwner,
   .panel td strong {
     overflow-wrap: anywhere;
   }
 
+  .filterSection {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
   .valueRace {
-    overflow-y: visible;
     padding-right: 0;
+    overflow-y: visible;
   }
 
   .valueFrame {
