@@ -1,67 +1,103 @@
 :root {
   color-scheme: light dark;
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --bg-start: #eef2ff;
-  --bg-end: #f8fafc;
-  --text-main: #0f172a;
-  --text-muted: #64748b;
-  --surface: rgba(255, 255, 255, 0.92);
-  --surface-border: #e2e8f0;
-  --surface-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
-  --header-bg: rgba(255, 255, 255, 0.9);
-  --header-border: #e2e8f0;
-  --button-bg: #0f172a;
+  --bg: #f6f8f6;
+  --text-main: #111714;
+  --text-muted: #66736d;
+  --surface: #ffffff;
+  --muted-surface: #f2f5f3;
+  --surface-border: #dfe7e2;
+  --surface-shadow: 0 18px 44px rgba(17, 23, 20, 0.07);
+  --header-bg: rgba(255, 255, 255, 0.86);
+  --header-border: #dfe7e2;
+  --button-bg: #00a66a;
   --button-text: #ffffff;
-  --button-border: #0f172a;
+  --button-border: #00a66a;
   --button-secondary-bg: #ffffff;
-  --button-secondary-text: #0f172a;
-  --button-secondary-border: #cbd5e1;
-  --table-head-bg: #f8fafc;
-  --badge-bg: #fef3c7;
-  --badge-text: #92400e;
-  --positive: #16a34a;
-  --negative: #dc2626;
-  --chart-text: #334155;
-  --chart-grid: #e2e8f0;
+  --button-secondary-text: #111714;
+  --button-secondary-border: #c9d5cf;
+  --table-head-bg: #f7faf8;
+  --rank-bg: #ecf8f2;
+  --rank-text: #007a4d;
+  --symbol-bg: #111714;
+  --symbol-text: #ffffff;
+  --positive: #008f5a;
+  --negative: #d92d20;
+  --warning: #b7791f;
+  --chart-text: #33423b;
+  --chart-grid: #e5ece8;
+  --skeleton-a: #edf2ef;
+  --skeleton-b: #f8faf9;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  min-height: 100%;
+  background: var(--bg);
+}
+
 body {
+  min-height: 100%;
   margin: 0;
-  background: radial-gradient(circle at top left, var(--bg-start), var(--bg-end) 40%);
+  background:
+    linear-gradient(180deg, rgba(0, 166, 106, 0.08), rgba(0, 166, 106, 0) 280px),
+    var(--bg);
   color: var(--text-main);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }
 
 a {
   color: inherit;
 }
 
+::selection {
+  color: #ffffff;
+  background: #00a66a;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg-start: #0b1220;
-    --bg-end: #050a14;
-    --text-main: #e2e8f0;
-    --text-muted: #94a3b8;
-    --surface: rgba(15, 23, 42, 0.85);
-    --surface-border: #1e293b;
-    --surface-shadow: 0 10px 24px rgba(2, 6, 23, 0.5);
-    --header-bg: rgba(2, 6, 23, 0.8);
-    --header-border: #1e293b;
-    --button-bg: #2563eb;
-    --button-text: #ffffff;
-    --button-border: #2563eb;
-    --button-secondary-bg: #0f172a;
-    --button-secondary-text: #e2e8f0;
-    --button-secondary-border: #334155;
-    --table-head-bg: #0f172a;
-    --badge-bg: #3f2f17;
-    --badge-text: #fcd34d;
-    --positive: #4ade80;
-    --negative: #f87171;
-    --chart-text: #cbd5e1;
-    --chart-grid: #1e293b;
+    --bg: #080d0b;
+    --text-main: #eef7f2;
+    --text-muted: #93a39b;
+    --surface: #101713;
+    --muted-surface: #151f1a;
+    --surface-border: #24342c;
+    --surface-shadow: 0 18px 44px rgba(0, 0, 0, 0.36);
+    --header-bg: rgba(8, 13, 11, 0.82);
+    --header-border: #24342c;
+    --button-bg: #00c77d;
+    --button-text: #06100b;
+    --button-border: #00c77d;
+    --button-secondary-bg: #101713;
+    --button-secondary-text: #eef7f2;
+    --button-secondary-border: #2d4338;
+    --table-head-bg: #131d18;
+    --rank-bg: #113425;
+    --rank-text: #6ff0b7;
+    --symbol-bg: #eef7f2;
+    --symbol-text: #080d0b;
+    --positive: #49d99a;
+    --negative: #ff7a70;
+    --warning: #f6c66d;
+    --chart-text: #c5d4cc;
+    --chart-grid: #24342c;
+    --skeleton-a: #15201a;
+    --skeleton-b: #1d2a23;
+  }
+
+  body {
+    background:
+      linear-gradient(180deg, rgba(0, 199, 125, 0.1), rgba(0, 199, 125, 0) 280px),
+      var(--bg);
   }
 }

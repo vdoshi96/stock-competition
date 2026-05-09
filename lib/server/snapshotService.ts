@@ -52,9 +52,19 @@ export async function computeSnapshot(): Promise<SnapshotResponse> {
   const snapshot = buildSnapshotResponse(
     picks,
     mergedSeries,
-    "Yahoo Finance + Locked Baseline (Dec 31 close to regular market price)"
+    {
+      providerLabel: "Yahoo Finance batched quotes + locked Dec 31 close baseline",
+      latestByTicker: yahooData.latestByTicker,
+      baselineByTicker,
+      quoteMetaByTicker: yahooData.quoteMetaByTicker,
+      quoteFailures: yahooData.quoteFailures,
+      fetchStats: yahooData.stats,
+    }
   );
   const elapsedMs = Math.round(performance.now() - started);
-  console.info(`snapshot computed for ${uniqueTickers.length} tickers in ${elapsedMs}ms`);
+  console.info(
+    `snapshot computed for ${uniqueTickers.length} tickers in ${elapsedMs}ms ` +
+      `(api calls ${yahooData.stats.actualApiCalls}, previous estimate ${yahooData.stats.estimatedPreviousApiCalls})`
+  );
   return snapshot;
 }

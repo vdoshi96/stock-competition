@@ -1,5 +1,13 @@
 import { BENCHMARKS, CRYPTO_ADJACENT, STARTING_BALANCE } from "@/lib/server/constants";
-import type { PricePoint, SeriesPoint, SnapshotResponse, SnapshotUser, UserPick } from "@/lib/types";
+import type {
+  MarketDataStats,
+  PricePoint,
+  QuoteMeta,
+  SeriesPoint,
+  SnapshotResponse,
+  SnapshotUser,
+  UserPick,
+} from "@/lib/types";
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
@@ -38,8 +46,21 @@ function seriesToScaledHistory(points: PricePoint[], targetYtd: number): SeriesP
 export function buildSnapshotResponse(
   picks: UserPick[],
   seriesByTicker: Record<string, PricePoint[] | null>,
-  providerLabel = "Alpha Vantage"
+  options: string | {
+    providerLabel?: string;
+    latestByTicker?: Record<string, number | null>;
+    baselineByTicker?: Record<string, number | null>;
+    quoteMetaByTicker?: Record<string, QuoteMeta>;
+    quoteFailures?: string[];
+    fetchStats?: MarketDataStats;
+  } = "Alpha Vantage"
 ): SnapshotResponse {
+  const providerLabel = typeof options === "string" ? options : options.providerLabel ?? "Alpha Vantage";
+  const latestByTicker = typeof options === "string" ? {} : options.latestByTicker ?? {};
+  const baselineByTicker = typeof options === "string" ? {} : options.baselineByTicker ?? {};
+  const quoteMetaByTicker = typeof options === "string" ? {} : options.quoteMetaByTicker ?? {};
+  const quoteFailures = typeof options === "string" ? [] : options.quoteFailures ?? [];
+  const fetchStats = typeof options === "string" ? undefined : options.fetchStats;
   const allUserTickers = picks.map((pick) => pick.ticker);
   const ytdReturns: Record<string, number> = {};
   const histories: Record<string, SeriesPoint[]> = {};
@@ -60,12 +81,21 @@ export function buildSnapshotResponse(
 
   const users: SnapshotUser[] = picks.map((pick) => {
     const ytd = ytdReturns[pick.ticker] ?? 0;
+    const baseline = baselineByTicker[pick.ticker] ?? null;
+    const latest = latestByTicker[pick.ticker] ?? null;
+    const shares = baseline && baseline > 0 ? STARTING_BALANCE / baseline : null;
+    const quoteMeta = quoteMetaByTicker[pick.ticker];
     return {
       name: pick.name,
       ticker: pick.ticker,
       ytd_return: ytd,
       balance: round2(STARTING_BALANCE * (1 + ytd / 100)),
       crypto_adjacent: CRYPTO_ADJACENT.has(pick.ticker),
+      baseline_price: baseline,
+      latest_price: latest,
+      shares: shares == null ? null : Math.round(shares * 10000) / 10000,
+      quote_time: quoteMeta?.label ?? null,
+      quote_session: quoteMeta?.session ?? null,
     };
   });
   users.sort((a, b) => b.ytd_return - a.ytd_return);
@@ -81,10 +111,17 @@ export function buildSnapshotResponse(
 
   const benchmarks = BENCHMARKS.map((ticker) => {
     const ytd = ytdReturns[ticker] ?? 0;
+    const baseline = baselineByTicker[ticker] ?? null;
+    const latest = latestByTicker[ticker] ?? null;
+    const quoteMeta = quoteMetaByTicker[ticker];
     return {
       ticker,
       ytd_return: ytd,
       balance: round2(STARTING_BALANCE * (1 + ytd / 100)),
+      baseline_price: baseline,
+      latest_price: latest,
+      quote_time: quoteMeta?.label ?? null,
+      quote_session: quoteMeta?.session ?? null,
     };
   });
 
@@ -142,5 +179,8 @@ export function buildSnapshotResponse(
     histories,
     updated_at: formatUpdatedAt(),
     data_provider: providerLabel,
+    quote_meta: quoteMetaByTicker,
+    quote_failures: quoteFailures,
+    fetch_stats: fetchStats,
   };
 }

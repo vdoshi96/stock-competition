@@ -3,7 +3,7 @@ import path from "node:path";
 
 import type { UserPick } from "@/lib/types";
 
-const PICK_LINE = /^\s*([A-Za-z0-9 _.-]+)\s*-\s*\$?([A-Za-z.]+)\s*$/;
+const PICK_LINE = /^\s*([A-Za-z0-9 _.-]+)\s*-\s*\$?([A-Za-z0-9.-]+)\s*$/;
 const PICKS_FILE = path.join(process.cwd(), "User_stockpicks.md");
 
 export async function loadUserPicks(): Promise<UserPick[]> {
@@ -17,7 +17,7 @@ export async function loadUserPicks(): Promise<UserPick[]> {
     }
 
     const name = match[1].trim();
-    const ticker = match[2].trim().toUpperCase();
+    const ticker = match[2].trim().replace(/^\$/, "").toUpperCase();
     if (!name || !ticker) {
       continue;
     }

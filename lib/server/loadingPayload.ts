@@ -26,6 +26,8 @@ export async function buildLoadingPayload(): Promise<SnapshotResponse> {
     histories: {},
     updated_at: "Loading data...",
     data_provider: "Loading",
+    quote_meta: {},
+    quote_failures: [],
     _loading: true,
   };
 }
