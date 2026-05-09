@@ -96,7 +96,7 @@ function rankLabel(index: number) {
 function HoldingRow({ user, index }: { user: SnapshotUser; index: number }) {
   return (
     <tr>
-      <td>
+      <td data-label="Symbol">
         <div className={styles.symbolCell}>
           <span className={styles.symbolBadge}>{user.ticker.slice(0, 2)}</span>
           <div>
@@ -105,10 +105,10 @@ function HoldingRow({ user, index }: { user: SnapshotUser; index: number }) {
           </div>
         </div>
       </td>
-      <td>{formatShares(user.shares)}</td>
-      <td>{formatPrice(user.latest_price)}</td>
-      <td>{formatCurrency(user.balance)}</td>
-      <td className={trendClass(user.ytd_return)}>
+      <td data-label="Qty">{formatShares(user.shares)}</td>
+      <td data-label="Price">{formatPrice(user.latest_price)}</td>
+      <td data-label="Value">{formatCurrency(user.balance)}</td>
+      <td data-label="Return" className={trendClass(user.ytd_return)}>
         {formatPct(user.ytd_return)}
         <span className={styles.rankHint}>{rankLabel(index)}</span>
       </td>
@@ -464,16 +464,16 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
                   <tbody>
                     {snapshot.users.map((user, index) => (
                       <tr key={user.name}>
-                        <td>
+                        <td data-label="Rank">
                           <span className={styles.rankBadge}>{index + 1}</span>
                         </td>
-                        <td>
+                        <td data-label="Participant">
                           <strong>{user.name}</strong>
                           {user.crypto_adjacent ? <span className={styles.subtleText}>Crypto-adjacent</span> : null}
                         </td>
-                        <td>{user.ticker}</td>
-                        <td className={trendClass(user.ytd_return)}>{formatPct(user.ytd_return)}</td>
-                        <td>{formatCurrency(user.balance)}</td>
+                        <td data-label="Ticker">{user.ticker}</td>
+                        <td data-label="Return" className={trendClass(user.ytd_return)}>{formatPct(user.ytd_return)}</td>
+                        <td data-label="Balance">{formatCurrency(user.balance)}</td>
                       </tr>
                     ))}
                   </tbody>
