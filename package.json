@@ -4,10 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "npm run docs:check",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint app components lib tests",
+    "lint": "eslint app components lib scripts tests",
+    "pretest": "npm run docs:check",
     "test": "vitest run",
+    "docs:generate": "node scripts/generate-docs.mjs --write",
+    "docs:check": "node scripts/generate-docs.mjs --check",
     "baseline:generate": "node scripts/generate-baseline.mjs"
   },
   "keywords": [],
@@ -29,6 +33,7 @@
     "@types/react-dom": "^19.2.3",
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.2.1",
+    "marked": "^18.0.6",
     "typescript": "^6.0.2",
     "vitest": "^4.1.2"
   }
