@@ -12,9 +12,9 @@ Ground-up rebuild of the stock competition tracker as a Next.js app with Vercel 
 
 ## Preserved business logic
 
-- YTD for each ticker is computed from first close of current year to latest close.
+- YTD for each ticker is computed from the locked Dec. 31, 2025 regular-session close to the latest price.
 - Group average is mean of all user YTD returns.
-- Filtered average excludes `COIN` and `HOOD`.
+- Filtered average excludes `COIN`, `HOOD`, and `SOFI`.
 - Benchmarks remain `SPY`, `VT`, `VTI`.
 - Balance projection remains `$1000 * (1 + ytd/100)`.
 
@@ -43,3 +43,19 @@ npm run dev
 - Output: default Next.js output
 - Optional env vars:
   - `NEXT_PUBLIC_GITHUB_REPO_URL` (optional)
+
+## Documentation
+
+Tracked project-owned prose sources are canonical. The inventory is index-based so private untracked notes remain untouched; stage a new project-owned source before regenerating its deterministic same-directory HTML companion:
+
+```bash
+npm run docs:generate
+```
+
+Verify completeness and exact generated-content parity with:
+
+```bash
+npm run docs:check
+```
+
+The parity check also runs automatically before `npm test` and `npm run build`.

@@ -1,137 +1,124 @@
-# Vercel Speed Insights Setup Guide
+# Vercel Speed Insights Status and Setup
 
-This document provides instructions for completing the Vercel Speed Insights integration for this Flask application.
+This repository is a Next.js 16 App Router application using Vercel's standard Next.js build.
 
-## What Has Been Implemented
+## Current status
 
-The Speed Insights tracking script has been added to `templates/index.html` using the CDN version of `@vercel/speed-insights`. The implementation uses the `injectSpeedInsights()` function which will automatically:
+Speed Insights is not currently integrated in repository source:
 
-- Track Core Web Vitals (LCP, FID, CLS, FCP, TTFB)
-- Monitor page performance metrics
-- Send data to Vercel's analytics endpoint when deployed
+- `@vercel/speed-insights` is not listed in the package manifests.
+- `app/layout.tsx` does not render the `SpeedInsights` component.
+- No tracked Vercel configuration customizes Speed Insights.
+- Whether Speed Insights is enabled for the linked Vercel project cannot be determined from this repository.
 
-## Next Steps (To Be Done in Vercel Dashboard)
+A legacy Flask version imported the version 1 client from a CDN in `templates/index.html`. That template was deleted during the Next.js rebuild. Do not restore the CDN snippet.
 
-### 1. Enable Speed Insights in Your Vercel Project
+## Enable Speed Insights
 
-1. Log in to your Vercel dashboard at https://vercel.com
-2. Navigate to your project (stock-competition)
-3. Go to the "Speed Insights" tab in the project settings
-4. Click the "Enable" button
-5. This will provision the analytics infrastructure for your project
+### 1. Enable the Vercel project
 
-### 2. Deploy Your Application
+In the Vercel dashboard, open **Speed Insights**, select the project linked to this repository, review the applicable usage and pricing, and select **Enable**.
 
-After enabling Speed Insights:
+Dashboard enablement is external state and must be verified separately.
+
+### 2. Install the package
 
 ```bash
-# Using Vercel CLI
-vercel deploy
-
-# Or connect your Git repository for automatic deployments
+npm install @vercel/speed-insights
 ```
 
-### 3. Verify Installation
+Commit both `package.json` and `package-lock.json`.
 
-After deployment:
+### 3. Add the Next.js component
 
-1. Visit your deployed application
-2. Open browser DevTools (F12)
-3. Go to the Network tab
-4. Look for requests to `va.vercel-scripts.com` - this confirms the script is loading
-5. Performance data will appear in the Vercel dashboard within a few hours after users visit your site
+Update `app/layout.tsx`:
 
-## How It Works
+```tsx
+import type { Metadata } from "next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
+import "./globals.css";
 
-### Current Implementation
-
-The integration uses a CDN-hosted version of the Speed Insights package:
-
-```javascript
-import { injectSpeedInsights } from 'https://cdn.jsdelivr.net/npm/@vercel/speed-insights@1/+esm';
-injectSpeedInsights();
-```
-
-### When Deployed on Vercel
-
-When your Flask application is deployed on Vercel:
-
-1. The Speed Insights script automatically detects it's running in production
-2. It reads the analytics configuration from your Vercel project
-3. Web vitals are collected from real user interactions
-4. Data is securely transmitted to Vercel's analytics infrastructure
-5. You can view performance metrics in your project dashboard
-
-### Development vs Production
-
-- **Development**: The script operates in debug mode and logs to the console
-- **Production**: The script automatically detects the production environment and sends data to Vercel
-
-## Features Enabled
-
-With Speed Insights installed, you'll be able to:
-
-- ✅ Monitor Core Web Vitals across all pages
-- ✅ Track performance metrics over time
-- ✅ Identify performance regressions after deployments
-- ✅ See real user experience data (not synthetic tests)
-- ✅ Get alerts for performance issues
-- ✅ Compare performance across different pages and routes
-
-## Configuration Options
-
-The current implementation uses default settings. If you need to customize the behavior, you can pass options to `injectSpeedInsights()`:
-
-```javascript
-injectSpeedInsights({
-  // Sample only 50% of page views (default is 100%)
-  sampleRate: 0.5,
-  
-  // Enable debug mode to see events in console
-  debug: true,
-  
-  // Filter or modify data before sending
-  beforeSend: (data) => {
-    // Optionally modify or filter data
-    return data;
+export const metadata: Metadata = {
+  title: "Stock Competition",
+  description: "Professional YTD tracker for user stock picks vs SPY, VT, and VTI.",
+  icons: {
+    icon: "/favicon.svg",
   },
-  
-  // Specify a custom route pattern
-  route: '/custom-route',
-});
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en">
+      <body>
+        {children}
+        <SpeedInsights />
+      </body>
+    </html>
+  );
+}
 ```
+
+The Next.js-specific import supplies route information automatically. Do not add a CDN script or recreate `templates/index.html`.
+
+### 4. Verify locally
+
+```bash
+npm ls @vercel/speed-insights --depth=0
+npm run lint
+npm test
+npm run build
+```
+
+These checks verify the repository integration and production build. Confirm actual reporting separately on a deployed Vercel environment.
+
+### 5. Deploy and verify
+
+Deploy by merging through the repository's Git-connected production branch, or use `vercel deploy --prod` when an explicit production CLI deployment is intended.
+
+After a deployment created after dashboard enablement:
+
+1. Load the deployed application.
+2. Confirm a Vercel-generated `/<unique-path>/script.js` request. Do not depend on the legacy `va.vercel-scripts.com` hostname.
+3. Navigate away, switch tabs, or unload the page before expecting a `vitals` request; metrics may be sent at blur or unload.
+4. Check the Speed Insights dashboard after real visits and select the correct Preview or Production environment.
+
+Speed Insights reports real-user metrics including LCP, INP, CLS, FCP, and TTFB. Preview and production deployments can both be tracked.
+
+## Optional configuration
+
+Default settings are sufficient for this application. The component supports options such as `sampleRate`, `beforeSend`, and `debug`. The framework-specific import determines the route automatically.
+
+Consult the current package documentation before adding custom endpoints, script URLs, or filtering logic.
 
 ## Troubleshooting
 
-### Script Not Loading
+### Script does not load
 
-- Ensure your project is deployed to Vercel
-- Check that Speed Insights is enabled in the Vercel dashboard
-- Verify browser console for any error messages
+- Confirm dashboard enablement.
+- Confirm the package is installed and locked.
+- Confirm `<SpeedInsights />` is rendered by `app/layout.tsx`.
+- Confirm the deployment was created after enablement.
+- Check whether an ad blocker blocked the script.
 
-### No Data Appearing in Dashboard
+### Script loads but no metrics request appears
 
-- Data collection requires real user visits (not just developer previews)
-- Performance metrics can take a few hours to appear initially
-- Ensure the application is in production mode on Vercel
+Metrics can be sent on page blur or unload. Navigate, switch tabs, or leave the page before concluding that reporting failed.
 
-### Development Testing
+### Dashboard has no data
 
-To test in development:
-- The script will work but won't send data to Vercel
-- Use `debug: true` option to see events in browser console
-- Full functionality requires a Vercel production deployment
+- Generate real traffic on a deployed environment.
+- Select the matching Preview or Production filter.
+- Allow enough traffic and time for useful dashboard results.
+- Check for ad blockers or proxy rules that block Vercel's generated routes.
 
-## Additional Resources
+## Resources
 
-- [Vercel Speed Insights Documentation](https://vercel.com/docs/speed-insights)
-- [Vercel Speed Insights Quickstart](https://vercel.com/docs/speed-insights/quickstart)
-- [Core Web Vitals](https://web.dev/vitals/)
-- [@vercel/speed-insights npm package](https://www.npmjs.com/package/@vercel/speed-insights)
-
-## Support
-
-For issues or questions:
-- Check the [Vercel Documentation](https://vercel.com/docs)
-- Visit [Vercel Community](https://github.com/vercel/vercel/discussions)
-- Contact Vercel Support through your dashboard
+- [Speed Insights quickstart](https://vercel.com/docs/speed-insights/quickstart)
+- [Package configuration](https://vercel.com/docs/speed-insights/package)
+- [Metrics](https://vercel.com/docs/speed-insights/metrics)
+- [Troubleshooting](https://vercel.com/docs/speed-insights/troubleshooting)
+- [Limits and pricing](https://vercel.com/docs/speed-insights/limits-and-pricing)
