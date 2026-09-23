@@ -1,0 +1,664 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stock Competition: UI/UX audit and redesign</title>
+<style>
+  :root {
+    --ink: #0b1526; --ink-2: #3c4b63; --ink-3: #66758d; --line: #dfe5ee; --paper: #ffffff; --wash: #f4f6fa;
+    --high: #c4291c; --high-bg: #fff1f0; --med: #8a5a00; --med-bg: #fff7e8; --low: #3c4b63; --low-bg: #eef2f7;
+    --accent: #1266f1; --good: #007a5a; --good-bg: #e8f7f1;
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--ink); background: var(--wash);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; line-height: 1.55; }
+  a { color: var(--accent); }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.86em; background: var(--low-bg); padding: 1px 5px; border-radius: 4px; }
+  .doc { width: min(1240px, calc(100% - 40px)); margin: 0 auto; padding: 40px 0 80px; }
+  header.doc-head { background: #071427; color: #eef5ff; }
+  header.doc-head .doc { padding: 48px 0 40px; }
+  .eyebrow { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #91b9ff; }
+  h1 { font-size: clamp(2rem, 4vw, 3rem); line-height: 1.05; margin: 10px 0 14px; letter-spacing: -0.01em; }
+  .lede { max-width: 780px; font-size: 1.08rem; color: #c9d6e8; margin: 0; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 22px; font-size: 0.85rem; color: #9baabe; }
+  .score { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 28px; }
+  .score div { border: 1px solid #24344d; border-radius: 10px; padding: 14px 16px; background: #0d1829; }
+  .score strong { display: block; font-size: 1.9rem; line-height: 1; }
+  .score span { font-size: 0.8rem; color: #9baabe; }
+  nav.toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 32px; }
+  nav.toc a { text-decoration: none; font-size: 0.82rem; font-weight: 700; padding: 7px 12px; border-radius: 999px; background: var(--paper); border: 1px solid var(--line); color: var(--ink-2); }
+  section.block { margin: 0 0 56px; }
+  h2 { font-size: 1.6rem; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 + p.sub { margin: 0 0 22px; color: var(--ink-3); max-width: 820px; }
+  h3 { margin: 0 0 8px; font-size: 1.05rem; }
+  .card { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+  .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .moves { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .moves .card strong { display: block; font-size: 1.02rem; margin-bottom: 6px; }
+  .moves .card p { margin: 0; color: var(--ink-2); font-size: 0.92rem; }
+  .num { display: inline-flex; width: 26px; height: 26px; border-radius: 999px; align-items: center; justify-content: center; background: var(--accent); color: #fff; font-weight: 800; font-size: 0.8rem; margin-bottom: 10px; }
+
+  /* Annotated captures */
+  .shots { display: grid; grid-template-columns: 1.9fr 1fr; gap: 20px; align-items: start; }
+  .shot { position: relative; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+  .shot figure { margin: 0; position: relative; }
+  .shot img { display: block; width: 100%; height: auto; border-radius: 6px; }
+  .shot figcaption { font-size: 0.8rem; color: var(--ink-3); padding: 8px 4px 2px; }
+  .pin { position: absolute; transform: translate(-50%, -50%); min-width: 30px; height: 30px; padding: 0 7px; border-radius: 999px; background: var(--high); color: #fff; font-weight: 800; font-size: 0.72rem; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; box-shadow: 0 0 0 3px #fff, 0 6px 16px rgba(0,0,0,.25); }
+  .pin.med { background: #b86e0f; }
+  .pin.low { background: #475569; }
+  .mobile-shots { display: grid; gap: 20px; }
+  .mobile-shots .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  /* Findings */
+  .finding { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 20px; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-bottom: 14px; scroll-margin-top: 20px; }
+  .finding .tag { font-weight: 900; font-size: 1.05rem; }
+  .sev { display: inline-block; margin-top: 6px; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; }
+  .sev.high { color: var(--high); background: var(--high-bg); }
+  .sev.med { color: var(--med); background: var(--med-bg); }
+  .sev.low { color: var(--low); background: var(--low-bg); }
+  .finding h3 { font-size: 1.1rem; }
+  .finding dl { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 6px 14px; margin: 10px 0 0; font-size: 0.92rem; }
+  .finding dt { color: var(--ink-3); font-weight: 700; }
+  .finding dd { margin: 0; color: var(--ink-2); }
+  .finding .task { font-size: 0.78rem; color: var(--ink-3); margin-top: 6px; }
+  .mini { margin-top: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .mini > div { border: 1px dashed var(--line); border-radius: 10px; padding: 12px; background: var(--wash); }
+  .mini .label { font-size: 0.68rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 8px; }
+  .mini .label.after { color: var(--good); }
+
+  /* Frames */
+  .browser { background: #e5e9f0; border-radius: 12px; padding: 0; overflow: hidden; border: 1px solid #cfd6e1; }
+  .browser .bar { display: flex; gap: 6px; align-items: center; padding: 9px 12px; background: #eef1f5; border-bottom: 1px solid #d5dbe4; }
+  .browser .bar i { width: 11px; height: 11px; border-radius: 999px; background: #d0d6df; }
+  .browser .bar span { margin-left: 12px; font-size: 0.75rem; color: #66758d; background: #fff; border-radius: 6px; padding: 3px 10px; flex: 1; max-width: 420px; }
+  .scaler { position: relative; overflow: hidden; }
+  .scaler > .stage { transform-origin: top left; position: absolute; top: 0; left: 0; }
+  .phones { display: flex; flex-wrap: wrap; gap: 28px; justify-content: center; }
+  .phone { width: 414px; border-radius: 44px; padding: 12px; background: #0b1220; box-shadow: 0 24px 60px rgba(7,20,39,.25); }
+  .phone .screen { width: 390px; height: 844px; border-radius: 34px; overflow: auto; position: relative; }
+  .phone-cap { text-align: center; font-size: 0.82rem; color: var(--ink-3); margin-top: 10px; }
+  .states { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .state h3 { font-size: 0.95rem; margin-bottom: 4px; }
+  .state p { margin: 0 0 12px; color: var(--ink-3); font-size: 0.86rem; }
+
+  /* Workflows */
+  .flow { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px; }
+  .flow .card h3 { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+  .flow .cost { font-size: 0.78rem; font-weight: 800; padding: 2px 8px; border-radius: 999px; }
+  .flow .before .cost { color: var(--high); background: var(--high-bg); }
+  .flow .after .cost { color: var(--good); background: var(--good-bg); }
+  .steps { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+  .steps span { font-size: 0.82rem; padding: 6px 10px; border-radius: 8px; background: var(--wash); border: 1px solid var(--line); }
+  .steps .pain { background: var(--high-bg); border-color: #f5c2bd; }
+  .steps .win { background: var(--good-bg); border-color: #b5e3d1; }
+  .steps b { color: var(--ink-3); font-weight: 400; }
+  .journey-title { font-weight: 800; margin: 26px 0 8px; font-size: 1.05rem; }
+
+  table.map { width: 100%; border-collapse: collapse; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; font-size: 0.9rem; }
+  table.map th, table.map td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.map th { background: var(--wash); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-3); }
+
+  /* ===== Redesign mockup (mirrors the plan's tokens and layout) ===== */
+  .rd { --bg: #f5f7fb; --text-main: #071427; --text-muted: #5b6b84; --surface: #ffffff; --muted-surface: #f6f8fb; --surface-border: #d8e0ec;
+        --header-bg: rgba(255,255,255,.92); --button-bg: #1266f1; --button-text: #fff; --button-secondary-bg: #fff; --button-secondary-border: #c8d3e3;
+        --rank-bg: #eff6ff; --rank-text: #1254c8; --positive: #007a5a; --negative: #c4291c; --warning: #b86e0f; --warning-surface: #fff7e8; --warning-border: #f3d19a;
+        --danger-surface: #fff1f0; --danger-border: #f5c2bd; --chart-text: #40516b; --chart-grid: #e6ebf3; --chart-zero: #9aa9bf; --skeleton-a: #e9eff8; --skeleton-b: #f8fbff;
+        --shadow: 0 1px 2px rgba(15,46,92,.06), 0 8px 24px rgba(15,46,92,.06);
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text-main); line-height: 1.35; font-size: 16px; }
+  .rd.dark { --bg: #07101f; --text-main: #eef5ff; --text-muted: #9baabe; --surface: #0d1829; --muted-surface: #121f33; --surface-border: #24344d;
+        --header-bg: rgba(7,16,31,.88); --button-bg: #4b8cff; --button-text: #07101f; --button-secondary-bg: #0d1829; --button-secondary-border: #2d405f;
+        --rank-bg: #102a53; --rank-text: #91b9ff; --positive: #4fd7a4; --negative: #ff7a70; --warning: #f6c66d; --warning-surface: #2a2110; --warning-border: #5c4717;
+        --danger-surface: #2c1414; --danger-border: #6b2a26; --chart-text: #c9d6e8; --chart-grid: #253851; --chart-zero: #5b6f8e; --skeleton-a: #13213a; --skeleton-b: #1a2b49; --shadow: 0 8px 24px rgba(0,0,0,.3); }
+  .rd * { box-sizing: border-box; }
+  .rd .pos { color: var(--positive); } .rd .neg { color: var(--negative); }
+  .rd .num { all: unset; font-variant-numeric: tabular-nums; }
+  .rd-header { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 60px; padding: 0 28px; background: var(--header-bg); border-bottom: 1px solid var(--surface-border); backdrop-filter: blur(16px); }
+  .rd-brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+  .rd-logo { width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(145deg, #1266f1, #0a2a58); display: grid; place-items: center; flex: none; }
+  .rd-brand h1 { all: unset; display: block; font-size: 1rem; font-weight: 800; }
+  .rd-fresh { display: flex; align-items: center; gap: 6px; margin-top: 2px; color: var(--text-muted); font-size: .78rem; }
+  .rd-fresh i { width: 7px; height: 7px; border-radius: 999px; background: var(--positive); box-shadow: 0 0 0 3px color-mix(in srgb, var(--positive) 18%, transparent); }
+  .rd-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; min-width: 40px; padding: 0 14px; border-radius: 8px; font: inherit; font-size: .84rem; font-weight: 800; border: 1px solid var(--button-bg); background: var(--button-bg); color: var(--button-text); cursor: pointer; white-space: nowrap; }
+  .rd-btn.secondary { background: var(--button-secondary-bg); color: var(--text-main); border-color: var(--button-secondary-border); }
+  .rd-btn.busy { opacity: .75; }
+  .rd-main { max-width: 1280px; margin: 0 auto; padding: 20px 28px 36px; display: flex; flex-direction: column; gap: 16px; }
+  .rd-progress { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; font-size: .84rem; color: var(--text-muted); }
+  .rd-progress strong { color: var(--text-main); }
+  .rd-bar { flex: 1 1 200px; height: 6px; border-radius: 999px; background: var(--surface-border); overflow: hidden; }
+  .rd-bar span { display: block; height: 100%; background: var(--button-bg); border-radius: inherit; }
+  .rd-rules { color: var(--button-bg); font-weight: 700; }
+  .rd-summary { display: grid; grid-template-columns: minmax(320px, 1.6fr) repeat(4, minmax(150px, 1fr)); gap: 12px; }
+  .rd-leader { border-radius: 10px; padding: 18px 20px; color: #eef6ff; background: linear-gradient(135deg, rgba(18,102,241,.36), rgba(18,102,241,0) 46%), linear-gradient(145deg, #071427, #0a2a58 72%, #04101f); border: 1px solid #14376c; display: flex; justify-content: space-between; gap: 16px; }
+  .rd-kicker { font-size: .7rem; font-weight: 850; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); }
+  .rd-leader .rd-kicker { color: #bcd3f5; }
+  .rd-leader .name { font-size: 2.1rem; font-weight: 850; line-height: 1; margin-top: 8px; display: flex; align-items: center; gap: 10px; }
+  .rd-chip { display: inline-flex; align-items: center; gap: 5px; font-size: .7rem; font-weight: 800; padding: 3px 7px; border-radius: 999px; background: color-mix(in srgb, var(--text-muted) 14%, transparent); color: var(--text-muted); white-space: nowrap; }
+  .rd-leader .rd-chip { background: rgba(255,255,255,.14); color: #eef6ff; font-size: .78rem; }
+  .rd-leader .vs { margin-top: 10px; font-size: .86rem; color: #cfe0f7; }
+  .rd-leader .vs b { color: #5ef0b1; }
+  .rd-leader .big { text-align: right; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; }
+  .rd-leader .big strong { font-size: 1.9rem; color: #5ef0b1; line-height: 1; }
+  .rd-leader .big span { font-size: 1.05rem; font-weight: 700; }
+  .rd-tile { background: var(--surface); border: 1px solid var(--surface-border); border-radius: 10px; padding: 14px 16px; box-shadow: var(--shadow); display: flex; flex-direction: column; justify-content: space-between; gap: 8px; min-height: 112px; }
+  .rd-tile strong { font-size: 1.5rem; font-weight: 850; line-height: 1; font-variant-numeric: tabular-nums; }
+  .rd-tile small { font-size: .78rem; color: var(--text-muted); }
+  .rd-notice { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 10px; font-size: .86rem; }
+  .rd-notice.warn { background: var(--warning-surface); border: 1px solid var(--warning-border); }
+  .rd-notice.err { background: var(--danger-surface); border: 1px solid var(--danger-border); align-items: center; justify-content: space-between; }
+  .rd-panel { background: var(--surface); border: 1px solid var(--surface-border); border-radius: 10px; box-shadow: var(--shadow); padding: 18px; }
+  .rd-panel-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+  .rd-panel-head h2 { all: unset; display: block; font-size: 1.15rem; font-weight: 850; margin-top: 3px; }
+  .rd-pill { font-size: .74rem; font-weight: 750; padding: 5px 9px; border-radius: 999px; border: 1px solid var(--surface-border); background: var(--muted-surface); color: var(--text-muted); }
+  .rd-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+  .rd-table th { text-align: left; font-size: .68rem; font-weight: 850; letter-spacing: .05em; text-transform: uppercase; color: var(--text-muted); padding: 9px 10px; border-bottom: 1px solid var(--surface-border); background: var(--muted-surface); }
+  .rd-table th.r, .rd-table td.r { text-align: right; }
+  .rd-table td { padding: 8px 10px; border-bottom: 1px solid var(--surface-border); vertical-align: middle; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .rd-table tr.open td { background: var(--muted-surface); }
+  .rd-rank { display: flex; align-items: center; gap: 8px; }
+  .rd-rank b { width: 28px; height: 28px; border-radius: 8px; background: var(--rank-bg); color: var(--rank-text); display: grid; place-items: center; font-size: .78rem; }
+  .rd-move { font-size: .72rem; font-weight: 800; min-width: 22px; }
+  .rd-move.up { color: var(--positive); } .rd-move.down { color: var(--negative); } .rd-move.none { color: var(--text-muted); }
+  .rd-who { display: flex; align-items: center; gap: 10px; }
+  .rd-logo-t { width: 30px; height: 30px; border-radius: 8px; background: linear-gradient(145deg, #081528, #031021); color: #fff; display: grid; place-items: center; font-size: .62rem; font-weight: 900; flex: none; }
+  .rd-toggle { all: unset; cursor: pointer; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; min-height: 40px; }
+  .rd-toggle svg { opacity: .55; }
+  .rd-sub { display: flex; align-items: center; gap: 6px; font-size: .74rem; color: var(--text-muted); margin-top: -8px; }
+  .rd-chip.warn { background: var(--warning-surface); color: var(--warning); border: 1px solid var(--warning-border); }
+  .rd-ret { font-weight: 850; }
+  .rd-bal { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+  .rd-div { position: relative; width: 120px; height: 8px; border-radius: 999px; background: color-mix(in srgb, var(--surface-border) 70%, transparent); }
+  .rd-div::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--chart-zero); }
+  .rd-div span { position: absolute; top: 0; bottom: 0; border-radius: 999px; }
+  .rd-div span.up { left: 50%; background: var(--positive); }
+  .rd-div span.down { right: 50%; background: var(--negative); }
+  .rd-details { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) auto; gap: 12px 20px; align-items: end; padding: 4px 0 6px 38px; }
+  .rd-details dt { font-size: .68rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--text-muted); }
+  .rd-details dd { margin: 3px 0 0; font-size: .86rem; }
+  .rd-controls { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .rd-seg { display: inline-flex; flex-wrap: wrap; padding: 3px; border-radius: 10px; background: var(--muted-surface); border: 1px solid var(--surface-border); gap: 2px; }
+  .rd-seg span { min-height: 34px; min-width: 40px; display: inline-flex; align-items: center; justify-content: center; padding: 0 12px; border-radius: 7px; font-size: .8rem; font-weight: 750; color: var(--text-muted); }
+  .rd-seg span.on { background: var(--surface); color: var(--text-main); box-shadow: 0 1px 3px rgba(7,20,39,.15); }
+  .rd-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .rd-schip { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; padding: 0 11px; border-radius: 999px; border: 1px solid var(--surface-border); font-size: .78rem; font-weight: 700; color: var(--text-muted); background: var(--surface); }
+  .rd-schip i { width: 10px; height: 10px; border-radius: 999px; }
+  .rd-schip i.dash { border-radius: 2px; height: 4px; width: 14px; }
+  .rd-schip.on { color: var(--text-main); }
+  .rd-chart { position: relative; height: 360px; }
+  .rd-chart svg { width: 100%; height: 100%; display: block; overflow: visible; }
+  .rd-tip { position: absolute; background: var(--surface); border: 1px solid var(--surface-border); border-radius: 8px; padding: 8px 10px; font-size: .74rem; box-shadow: 0 10px 24px rgba(7,20,39,.18); min-width: 170px; }
+  .rd-tip b { display: block; margin-bottom: 4px; }
+  .rd-tip div { display: flex; justify-content: space-between; gap: 12px; }
+  .rd-tip i { display: inline-block; width: 8px; height: 8px; border-radius: 999px; margin-right: 6px; }
+  .rd-footer { text-align: center; color: var(--text-muted); font-size: .78rem; padding: 6px 20px 28px; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+  .rd-footer .links { display: flex; gap: 16px; }
+  .rd-footer .links span { color: var(--button-bg); font-weight: 700; }
+  .rd-skel { border-radius: 8px; background: linear-gradient(90deg, var(--skeleton-a), var(--skeleton-b), var(--skeleton-a)); }
+  /* mobile */
+  .rd.m .rd-header { padding: 0 12px; }
+  .rd.m .rd-main { padding: 12px 12px 28px; gap: 12px; }
+  .rd.m .rd-summary { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .rd.m .rd-leader { grid-column: 1 / -1; padding: 16px; }
+  .rd.m .rd-leader .name { font-size: 1.7rem; }
+  .rd.m .rd-leader .big strong { font-size: 1.5rem; }
+  .rd.m .rd-tile { min-height: 96px; padding: 12px; box-shadow: none; }
+  .rd.m .rd-tile strong { font-size: 1.25rem; }
+  .rd.m .rd-panel { padding: 14px 12px; }
+  .rd.m .rd-mrow { display: grid; grid-template-columns: 36px auto minmax(0, 1fr) auto; grid-template-areas: "rank who who ret" "rank who who bal" "rank today vs vs"; gap: 2px 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--surface-border); border-radius: 10px; background: var(--muted-surface); margin-bottom: 8px; font-variant-numeric: tabular-nums; }
+  .rd.m .rd-mrow .rank { grid-area: rank; align-self: start; display: flex; flex-direction: column; align-items: center; gap: 3px; padding-top: 6px; }
+  .rd.m .rd-mrow .rank b { width: 28px; height: 28px; border-radius: 8px; background: var(--rank-bg); color: var(--rank-text); display: grid; place-items: center; font-size: .78rem; }
+  .rd.m .rd-mrow .who { grid-area: who; min-width: 0; align-self: start; }
+  .rd.m .rd-mrow .ret { grid-area: ret; align-self: end; text-align: right; font-weight: 850; font-size: 1.05rem; }
+  .rd.m .rd-mrow .today { grid-area: today; } .rd.m .rd-mrow .vs { grid-area: vs; }
+  .rd.m .rd-mrow .today, .rd.m .rd-mrow .vs { font-size: .74rem; padding-right: 8px; color: var(--text-muted); white-space: nowrap; }
+  .rd.m .rd-mrow .today b, .rd.m .rd-mrow .vs b { font-weight: 800; }
+  .rd.m .rd-mrow .bal { grid-area: bal; align-self: start; text-align: right; font-size: .78rem; font-weight: 700; color: var(--text-muted); }
+  .rd.m .rd-controls { flex-direction: column; }
+  .rd.m .rd-chart { height: 300px; }
+  @media (max-width: 1000px) {
+    .grid-2, .grid-3, .moves, .shots, .flow, .states { grid-template-columns: 1fr; }
+    .score { grid-template-columns: repeat(2, 1fr); }
+    .finding { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<header class="doc-head">
+  <div class="doc">
+    <div class="eyebrow">UI/UX audit · Sep 22, 2026</div>
+    <h1>Stock Competition: the numbers are right,<br>the page makes you work for them.</h1>
+    <p class="lede">An audit of the live dashboard at <code>stock-competition-blush.vercel.app</code> with renders of the redesigned layout, states, and workflows. Every finding maps to a task and tests in the implementation plan.</p>
+    <div class="meta">
+      <span>Scope: <code style="background:#13213a;color:#c9d6e8">components/Dashboard.tsx</code>, <code style="background:#13213a;color:#c9d6e8">components/dashboard.module.css</code>, <code style="background:#13213a;color:#c9d6e8">app/globals.css</code></span>
+      <span>Evidence: production captures at 1440 px and 390 px, light and dark</span>
+      <span>Plan: <code style="background:#13213a;color:#c9d6e8">docs/superpowers/plans/2026-09-22-ui-ux-redesign.md</code></span>
+    </div>
+    <div class="score">
+      <div><strong>15</strong><span>findings</span></div>
+      <div><strong style="color:#ff9a91">4</strong><span>high severity</span></div>
+      <div><strong style="color:#f6c66d">8</strong><span>medium severity</span></div>
+      <div><strong style="color:#c9d6e8">3</strong><span>low severity</span></div>
+    </div>
+  </div>
+</header>
+
+<main class="doc">
+  <nav class="toc" aria-label="Sections">
+    <a href="#moves">Three biggest moves</a><a href="#current">Current state</a><a href="#findings">Findings</a>
+    <a href="#desktop">Desktop render</a><a href="#mobile">Mobile renders</a><a href="#states">States</a>
+    <a href="#workflows">Workflows</a><a href="#mapping">Plan mapping</a>
+  </nav>
+
+  <section class="block" id="moves">
+    <h2>Three biggest moves</h2>
+    <p class="sub">Most of the value comes from three structural changes. The remaining findings are polish that the same rebuild absorbs.</p>
+    <div class="moves">
+      <div class="card"><span class="num">1</span><strong>One standings table, not three</strong><p>The same nine rows render as Leaderboard, Live Stock Rows, and Current Value. Merge them into one table with Today, vs SPY, and rank movement columns. Put secondary price data behind a row expander.</p></div>
+      <div class="card"><span class="num">2</span><strong>Answer “what changed today?”</strong><p>People revisit a friendly contest to see movement. The snapshot already holds daily history, so the client can derive day change and rank movement with no new API calls.</p></div>
+      <div class="card"><span class="num">3</span><strong>Never lose the data you already have</strong><p>A failed refresh replaces the whole dashboard with an error panel. Keep the last snapshot visible, show an inline alert, and add busy, freshness, and auto-refresh behavior.</p></div>
+    </div>
+  </section>
+
+  <section class="block" id="current">
+    <h2>Current state</h2>
+    <p class="sub">Production captures from the Sep 22 release verification. Pins link to findings.</p>
+    <div class="shots">
+      <div class="shot">
+        <figure>
+          <img src="assets/current-1440-light.png" alt="Current desktop dashboard at 1440 pixels, light theme">
+          <a class="pin med" href="#ux-09" style="left:13%;top:9.5%">09</a>
+          <a class="pin med" href="#ux-05" style="left:84%;top:17.4%">05</a>
+          <a class="pin" href="#ux-01" style="left:26%;top:22.3%">01</a>
+          <a class="pin" href="#ux-01" style="left:77%;top:22.3%">01</a>
+          <a class="pin med" href="#ux-06" style="left:74%;top:27.3%">06</a>
+          <a class="pin" href="#ux-03" style="left:40%;top:30%">03</a>
+          <a class="pin med" href="#ux-07" style="left:49%;top:55.5%">07</a>
+          <a class="pin" href="#ux-01" style="left:26%;top:78.5%">01</a>
+          <a class="pin low" href="#ux-15" style="left:30%;top:83%">15</a>
+          <a class="pin" href="#ux-04" style="left:75%;top:78.5%">04</a>
+          <a class="pin med" href="#ux-07" style="left:74%;top:93.5%">07</a>
+          <figcaption>1440 px, light. The page is 2,188 px tall; the same nine participants appear three times.</figcaption>
+        </figure>
+      </div>
+      <div class="mobile-shots">
+        <div class="pair">
+          <div class="shot"><figure>
+            <img src="assets/current-390-dark.png" alt="Current mobile dashboard top, dark theme">
+            <a class="pin med" href="#ux-08" style="left:50%;top:11%">08</a>
+            <a class="pin med" href="#ux-08" style="left:82%;top:34.3%">08</a>
+            <a class="pin med" href="#ux-09" style="left:50%;top:78%">09</a>
+            <figcaption>390 px dark. The header uses 128 px; six full-width cards precede any ranking.</figcaption>
+          </figure></div>
+          <div class="shot"><figure>
+            <img src="assets/current-390-holdings.png" alt="Current mobile holdings cards">
+            <a class="pin" href="#ux-01" style="left:50%;top:50%">01</a>
+            <a class="pin med" href="#ux-06" style="left:74%;top:65%">06</a>
+            <figcaption>390 px. Label-value grids make each row about 230 px tall.</figcaption>
+          </figure></div>
+        </div>
+        <div class="pair">
+          <div class="shot"><figure>
+            <img src="assets/current-390-charts.png" alt="Current mobile balance bars and benchmark chart">
+            <a class="pin low" href="#ux-15" style="left:62%;top:33%">15</a>
+            <a class="pin" href="#ux-04" style="left:70%;top:51%">04</a>
+            <a class="pin med" href="#ux-07" style="left:50%;top:78%">07</a>
+            <figcaption>390 px. Benchmark axis labels shrink to about 7 px and rotate; no tooltips exist.</figcaption>
+          </figure></div>
+          <div class="shot"><figure>
+            <img src="assets/current-390-light.png" alt="Current mobile dashboard top, light theme">
+            <a class="pin med" href="#ux-08" style="left:50%;top:11%">08</a>
+            <figcaption>390 px light. Updated time is hidden below 620 px.</figcaption>
+          </figure></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="findings">
+    <h2>Findings</h2>
+    <p class="sub">Severity reflects how often a participant hits the issue and how much it costs them. Evidence cites the current source.</p>
+
+    <article class="finding" id="ux-01"><div><div class="tag">UX-01</div><span class="sev high">High</span></div><div>
+      <h3>The same nine rows render three times</h3>
+      <dl><dt>Evidence</dt><dd>Leaderboard (<code>Dashboard.tsx:689-731</code>), Live Stock Rows (<code>:733-759</code>), and Current Value bars (<code>:806-817</code>) each list every participant with rank, ticker, return, and balance.</dd>
+      <dt>Impact</dt><dd>At 390 px the three lists become 27 stacked cards, about 5,000 px of scrolling. On desktop, the eye must match rows across two side-by-side tables.</dd>
+      <dt>Recommendation</dt><dd>One Standings table: Rank (with movement), Participant, Return, Today, vs SPY, Balance (diverging bar). Shares, Dec 31 price, latest price, and quote time move into an expandable detail row.</dd></dl>
+      <div class="task">Plan: Task 4 · Tests: <code>standings</code> suite</div></div></article>
+
+    <article class="finding" id="ux-02"><div><div class="tag">UX-02</div><span class="sev high">High</span></div><div>
+      <h3>A failed refresh wipes a valid dashboard</h3>
+      <dl><dt>Evidence</dt><dd>The <code>catch</code> in <code>fetchSnapshot</code> sets <code>state</code> to <code>"error"</code> (<code>Dashboard.tsx:415-418</code>). The render guard <code>state !== "ready"</code> (<code>:611</code>) then swaps the whole page for the error panel, even though <code>snapshot</code> still holds good data.</dd>
+      <dt>Impact</dt><dd>One flaky Yahoo response, or a phone moving between networks, blanks the page the participant was reading.</dd>
+      <dt>Recommendation</dt><dd>Separate initial-load failure (full error panel) from refresh failure (inline alert above the standings: “Couldn't refresh prices. Showing data from …” with Try again). Keep rendering the last snapshot.</dd></dl>
+      <div class="task">Plan: Task 5 · Tests: <code>header and refresh</code> suite</div></div></article>
+
+    <article class="finding" id="ux-03"><div><div class="tag">UX-03</div><span class="sev high">High</span></div><div>
+      <h3>No signal for what changed since the last close</h3>
+      <dl><dt>Evidence</dt><dd>The UI shows only year-to-date return. <code>snapshot.histories</code> already includes every daily close, and <code>group_avg_history</code> identifies the previous complete trading day.</dd>
+      <dt>Impact</dt><dd>“Did I move up?” and “What did my stock do today?” are the main reasons to reopen a friendly contest. Today the dashboard can't answer either question.</dd>
+      <dt>Recommendation</dt><dd>Add a Today column (price change since the previous close) and a rank-movement marker (▲2, ▼1, —) with screen-reader text. Derive both client-side.</dd></dl>
+      <div class="mini"><div><div class="label">Before</div><div class="rd" style="background:transparent"><table class="rd-table"><tr><td><div class="rd-rank"><b>3</b></div></td><td><b>Saurya</b></td><td class="r pos rd-ret">+19.87%</td></tr></table></div></div>
+      <div><div class="label after">After</div><div class="rd" style="background:transparent"><table class="rd-table"><tr><td><div class="rd-rank"><b>3</b><span class="rd-move up">▲2</span></div></td><td><b>Saurya</b></td><td class="r pos rd-ret">+19.87%</td><td class="r pos">+10.99%</td><td class="r pos">+6.41 pts</td></tr></table></div></div></div>
+      <div class="task">Plan: Tasks 2 and 4 · Tests: <code>dashboardModel</code>, <code>standings</code></div></div></article>
+
+    <article class="finding" id="ux-04"><div><div class="tag">UX-04</div><span class="sev high">High</span></div><div>
+      <h3>Market comparison is buried and approximate</h3>
+      <dl><dt>Evidence</dt><dd>“Group vs Market” is a separate hand-drawn SVG at the bottom (<code>Dashboard.tsx:193-298</code>) with no hover values and rotated 7 px labels on mobile. Per-pick comparison with SPY requires mental subtraction between two cards.</dd>
+      <dt>Impact</dt><dd>“Am I beating the market?” is the contest's core question, and the page makes participants compute it.</dd>
+      <dt>Recommendation</dt><dd>Add a vs SPY column (percentage points), a Beating SPY tile (“3 of 9”), and fold the benchmark view into the main chart as the “Group vs market” preset.</dd></dl>
+      <div class="task">Plan: Tasks 4, 6, and 7</div></div></article>
+
+    <article class="finding" id="ux-05"><div><div class="tag">UX-05</div><span class="sev med">Medium</span></div><div>
+      <h3>Developer diagnostics occupy primary space</h3>
+      <dl><dt>Evidence</dt><dd>The always-visible status banner shows “Quotes refreshed from batched Yahoo data”, API calls 13 / 24, quote batches, and fetch time (<code>Dashboard.tsx:656-686</code>). The footer repeats the provider pipeline.</dd>
+      <dt>Recommendation</dt><dd>Show a data notice only when quotes or histories are degraded. Move the diagnostics into a collapsed “Data details” disclosure in the footer.</dd></dl>
+      <div class="task">Plan: Tasks 5 and 6 · Tests: <code>summary</code> suite</div></div></article>
+
+    <article class="finding" id="ux-06"><div><div class="tag">UX-06</div><span class="sev med">Medium</span></div><div>
+      <h3>Identical timestamps repeat twelve times</h3>
+      <dl><dt>Evidence</dt><dd>“Sep 22, 2026, 07:59 PM ET (post-market)” renders on every holdings row and benchmark card (<code>Dashboard.tsx:316</code>, <code>:651</code>).</dd>
+      <dt>Recommendation</dt><dd>Show one relative freshness label in the header (“Updated 3 min ago”, absolute time on hover). Flag individual rows only when their quote isn't live, with a Delayed badge. Keep the full quote label in the row details.</dd></dl>
+      <div class="task">Plan: Tasks 4 and 5</div></div></article>
+
+    <article class="finding" id="ux-07"><div><div class="tag">UX-07</div><span class="sev med">Medium</span></div><div>
+      <h3>The comparison chart is hard to drive and colors collide</h3>
+      <dl><dt>Evidence</dt><dd>Fourteen checkboxes plus a duplicate Chart.js legend. <code>COLORS</code> has eight entries for nine users (<code>Dashboard.tsx:22</code>, <code>:451</code>), so Nari (SOFI) and Singh (MU) share blue. Colors follow rank, so they change when ranks change. MU's +284% flattens every other line with no range control. Two chart technologies use different axis styles.</dd>
+      <dt>Recommendation</dt><dd>One Chart.js chart with presets (Top 3 + SPY, Everyone, Group vs market, Custom), ranges (1W, 1M, 3M, YTD), colored chips that double as the legend, fixed per-ticker colors, and an index tooltip sorted by value.</dd></dl>
+      <div class="mini"><div><div class="label">Before</div><div style="display:flex;flex-wrap:wrap;gap:6px;font-size:.78rem"><span style="border:1px solid #d8e0ec;border-radius:6px;padding:5px 8px">☑ Singh (MU)</span><span style="border:1px solid #d8e0ec;border-radius:6px;padding:5px 8px">☐ Nikhil (ZETA)</span><span style="border:1px solid #d8e0ec;border-radius:6px;padding:5px 8px">☐ …12 more</span></div></div>
+      <div><div class="label after">After</div><div class="rd" style="background:transparent"><div class="rd-seg"><span class="on">Top 3 + SPY</span><span>Everyone</span><span>Group vs market</span><span>Custom</span></div></div></div></div>
+      <div class="task">Plan: Task 7 · Tests: <code>performance chart</code> suite</div></div></article>
+
+    <article class="finding" id="ux-08"><div><div class="tag">UX-08</div><span class="sev med">Medium</span></div><div>
+      <h3>Mobile header is tall and hides freshness</h3>
+      <dl><dt>Evidence</dt><dd>Below 920 px the sticky header stacks and full-width buttons wrap, reaching about 128 px (15% of an 844 px viewport). Below 620 px <code>.updatedAt</code> is <code>display: none</code> (<code>dashboard.module.css:811</code>). The leader card's decorative <code>::after</code> stroke crosses the balance on mobile. GitHub competes with Refresh as a header button.</dd>
+      <dt>Recommendation</dt><dd>A 60 px single-row header: logo, title, freshness line, icon-only Refresh (40 × 40). Move GitHub to the footer. Remove the decorative stroke.</dd></dl>
+      <div class="task">Plan: Tasks 5 and 9 · Tests: <code>layout and accessibility</code></div></div></article>
+
+    <article class="finding" id="ux-09"><div><div class="tag">UX-09</div><span class="sev med">Medium</span></div><div>
+      <h3>Summary cards are unbalanced</h3>
+      <dl><dt>Evidence</dt><dd>At 1440 px the leader sentence wraps to five lines in a narrow card. Five equal-weight metric cards follow. At 390 px six full-width cards take about 700 px before the rankings start.</dd>
+      <dt>Recommendation</dt><dd>A leader card (name, ticker, return, balance, vs SPY) plus four compact tiles: Group average, Ex-crypto average, S&amp;P 500 (with VT and VTI), and Beating SPY. Use a 2 × 2 tile grid on mobile.</dd></dl>
+      <div class="task">Plan: Task 6</div></div></article>
+
+    <article class="finding" id="ux-10"><div><div class="tag">UX-10</div><span class="sev med">Medium</span></div><div>
+      <h3>Refresh gives no feedback, and open tabs go stale</h3>
+      <dl><dt>Evidence</dt><dd>The Refresh button has no busy or disabled state. The <code>inFlight</code> guard silently drops repeat clicks (<code>Dashboard.tsx:378</code>). After the first load the client never polls, although the server cache refreshes every 5 minutes.</dd>
+      <dt>Recommendation</dt><dd>Busy state (“Refreshing…”, disabled, <code>aria-busy</code>), a relative freshness label that ticks every 30 seconds, and a 5-minute auto-refresh while the tab is visible, plus an immediate refresh when a stale tab becomes visible.</dd></dl>
+      <div class="task">Plan: Task 5</div></div></article>
+
+    <article class="finding" id="ux-11"><div><div class="tag">UX-11</div><span class="sev med">Medium</span></div><div>
+      <h3>Loading state doesn't resemble the page</h3>
+      <dl><dt>Evidence</dt><dd>Four generic shimmer bars (<code>Dashboard.tsx:328-356</code>) precede a very different layout, and the timeout copy says “Still warming up backend cache”.</dd>
+      <dt>Recommendation</dt><dd>A skeleton that mirrors progress, summary, and nine rows, with plain status text: “Building today's snapshot. Retrying in 15 seconds.”</dd></dl>
+      <div class="task">Plan: Task 5</div></div></article>
+
+    <article class="finding" id="ux-12"><div><div class="tag">UX-12</div><span class="sev med">Medium</span></div><div>
+      <h3>Accessibility gaps</h3>
+      <dl><dt>Evidence</dt><dd>Light <code>--positive</code> <code>#009e73</code> is 3.42:1 on white, below the 4.5:1 AA minimum for the 0.86 rem return text. No <code>:focus-visible</code> styles, no reduced-motion handling for the shimmer and hover lift, no table captions, no skip link. VTI's <code>#0f2e5c</code> line is 1.33:1 against the dark surface.</dd>
+      <dt>Recommendation</dt><dd>New tokens (<code>--positive: #007a5a</code>, 5.34:1), a global focus ring, <code>prefers-reduced-motion</code> overrides, a caption, a skip link, and a light VTI color (<code>#38bdf8</code>).</dd></dl>
+      <div class="mini"><div><div class="label">Before</div><span style="font-weight:850;color:#009e73;font-size:1.1rem">+284.58%</span> <small>3.42:1</small></div><div><div class="label after">After</div><span style="font-weight:850;color:#007a5a;font-size:1.1rem">+284.58%</span> <small>5.34:1</small></div></div>
+      <div class="task">Plan: Tasks 3 and 9 · Tests: <code>contrast</code>, <code>layout and accessibility</code></div></div></article>
+
+    <article class="finding" id="ux-13"><div><div class="tag">UX-13</div><span class="sev low">Low</span></div><div>
+      <h3>Jargon and unexplained rules</h3>
+      <dl><dt>Evidence</dt><dd>“Live Stock Rows”, “Filtered average”, rank hints (“First”, “Second”), and an unexplained “Crypto-adjacent” label. The page never says every pick starts with $1,000 at the Dec 31, 2025 close.</dd>
+      <dt>Recommendation</dt><dd>Rename to Standings and Ex-crypto average. Add a “How scoring works” disclosure and a tooltip on the Crypto-adjacent chip.</dd></dl>
+      <div class="task">Plan: Tasks 4 and 6</div></div></article>
+
+    <article class="finding" id="ux-14"><div><div class="tag">UX-14</div><span class="sev low">Low</span></div><div>
+      <h3>No competition context and no share path</h3>
+      <dl><dt>Evidence</dt><dd>There is no indication of how far into the year the contest is. Standings reach the group chat only as cropped screenshots.</dd>
+      <dt>Recommendation</dt><dd>A progress strip (“Day 265 of 365 · 100 days left”) and a Copy standings button that writes a plain-text summary to the clipboard.</dd></dl>
+      <div class="task">Plan: Tasks 6 and 8 · Tests: <code>sharing</code></div></div></article>
+
+    <article class="finding" id="ux-15"><div><div class="tag">UX-15</div><span class="sev low">Low</span></div><div>
+      <h3>Balance bars misrepresent losses</h3>
+      <dl><dt>Evidence</dt><dd>Bars scale to the largest balance with an 8% floor (<code>Dashboard.tsx:163</code>). A −34% loss still draws a bar growing right, with no $1,000 reference.</dd>
+      <dt>Recommendation</dt><dd>Diverging bars centered on 0% return: gains grow right in green, losses grow left in red, scaled to the largest absolute return.</dd></dl>
+      <div class="mini"><div><div class="label">Before</div><div style="height:8px;border-radius:9px;background:#e6ebf3;overflow:hidden"><div style="width:17%;height:100%;background:#ff5a4f"></div></div><small>SOFI −34.22%</small></div>
+      <div><div class="label after">After</div><div class="rd" style="background:transparent"><div class="rd-div" style="width:100%"><span class="down" style="width:6.01%"></span></div></div><small>SOFI −34.22%, left of the 0% line</small></div></div>
+      <div class="task">Plan: Tasks 2 and 4</div></div></article>
+  </section>
+
+  <section class="block" id="desktop">
+    <h2>Redesign render: desktop</h2>
+    <p class="sub">1440 px, light theme, rendered from the acceptance-test fixture. The standings and the chart both fit in about 1,450 px, compared with 2,188 px today. The tooltip shows the index-mode hover state.</p>
+    <div class="browser"><div class="bar"><i></i><i></i><i></i><span>stock-competition-blush.vercel.app</span></div>
+      <div class="scaler" data-width="1440"><div class="stage" id="desktop-stage" style="width:1440px"></div></div>
+    </div>
+  </section>
+
+  <section class="block" id="mobile">
+    <h2>Redesign renders: mobile</h2>
+    <p class="sub">390 × 844 px. Scroll inside each phone. Standings start in the first viewport. The header is 60 px and keeps freshness visible. Tiles use a 2 × 2 grid, and rows are compact cards no taller than 112 px.</p>
+    <div class="phones">
+      <div><div class="phone"><div class="screen" id="mobile-light"></div></div><div class="phone-cap">Light</div></div>
+      <div><div class="phone"><div class="screen" id="mobile-dark"></div></div><div class="phone-cap">Dark</div></div>
+    </div>
+  </section>
+
+  <section class="block" id="states">
+    <h2>States</h2>
+    <p class="sub">Each state is covered by an acceptance test in <code>tests/e2e/dashboard.spec.ts</code>.</p>
+    <div class="states">
+      <div class="card state"><h3>Refresh failed: data stays</h3><p>Inline alert above the standings. The last good snapshot keeps rendering.</p><div id="st-error"></div></div>
+      <div class="card state"><h3>Refreshing</h3><p>The button disables, shows “Refreshing…”, and sets <code>aria-busy</code>.</p><div id="st-busy"></div></div>
+      <div class="card state"><h3>Degraded data</h3><p>The notice appears only when a live quote or history is missing, and the affected row shows a Delayed badge.</p><div id="st-degraded"></div></div>
+      <div class="card state"><h3>Row details and Show on chart</h3><p>Participant names are buttons. The detail row holds the secondary price data and adds the pick to the chart.</p><div id="st-details"></div></div>
+      <div class="card state"><h3>First load</h3><p>The skeleton mirrors the final layout. Status text explains retries in plain words.</p><div id="st-loading"></div></div>
+      <div class="card state"><h3>Group vs market preset and Copy standings</h3><p>The benchmark view becomes a chart preset. Copy standings confirms with “Copied”.</p><div id="st-market"></div></div>
+    </div>
+  </section>
+
+  <section class="block" id="workflows">
+    <h2>Redesigned workflows</h2>
+    <p class="sub">The four journeys participants repeat most, before and after. Red steps mark friction; green steps are new capabilities.</p>
+
+    <div class="journey-title">1. Glance: who's winning and what moved today?</div>
+    <div class="flow">
+      <div class="card before"><h3>Before <span class="cost">~1,000 px of scrolling on mobile</span></h3><div class="steps"><span>Open page</span><b>→</b><span class="pain">Scroll past 128 px header and 6 cards</span><b>→</b><span>Read rank and YTD</span><b>→</b><span class="pain">Daily movement unavailable</span></div></div>
+      <div class="card after"><h3>After <span class="cost">First viewport</span></h3><div class="steps"><span>Open page</span><b>→</b><span>Leader card and 2 × 2 tiles</span><b>→</b><span class="win">Standings with ▲▼ and Today</span></div></div>
+    </div>
+
+    <div class="journey-title">2. How is my pick doing against the market?</div>
+    <div class="flow">
+      <div class="card before"><h3>Before <span class="cost">6 steps, mental math</span></h3><div class="steps"><span>Find row in Leaderboard</span><b>→</b><span class="pain">Find SPY card and subtract</span><b>→</b><span>Scroll to chart</span><b>→</b><span class="pain">Uncheck 4 defaults</span><b>→</b><span>Check own pick and SPY</span><b>→</b><span class="pain">Hover: nearest point only</span></div></div>
+      <div class="card after"><h3>After <span class="cost">2 steps</span></h3><div class="steps"><span class="win">Read vs SPY column</span><b>→</b><span>Tap name, then Show on chart</span><b>→</b><span class="win">Chart scrolls in with pick added; index tooltip</span></div></div>
+    </div>
+
+    <div class="journey-title">3. Share the standings in the group chat</div>
+    <div class="flow">
+      <div class="card before"><h3>Before <span class="cost">Screenshot, crop, send</span></h3><div class="steps"><span class="pain">Screenshot</span><b>→</b><span class="pain">Crop two tables</span><b>→</b><span>Send image</span></div></div>
+      <div class="card after"><h3>After <span class="cost">1 tap</span></h3><div class="steps"><span class="win">Copy standings</span><b>→</b><span>Paste: ranked text, averages, SPY, link</span></div></div>
+    </div>
+
+    <div class="journey-title">4. Refresh and recover</div>
+    <div class="flow">
+      <div class="card before"><h3>Before <span class="cost">Silent, then destructive</span></h3><div class="steps"><span>Tap Refresh</span><b>→</b><span class="pain">No feedback</span><b>→</b><span class="pain">On failure the page is replaced by an error</span></div></div>
+      <div class="card after"><h3>After <span class="cost">Visible and safe</span></h3><div class="steps"><span>Tap Refresh</span><b>→</b><span class="win">“Refreshing…”</span><b>→</b><span class="win">On failure: inline alert, data kept, Try again</span><b>→</b><span class="win">Auto-refresh every 5 min</span></div></div>
+    </div>
+  </section>
+
+  <section class="block" id="mapping">
+    <h2>Plan mapping</h2>
+    <p class="sub">The implementation plan turns each finding into a task with fixed acceptance tests. The implementer uses only these tests.</p>
+    <table class="map">
+      <thead><tr><th>Finding</th><th>Task</th><th>Acceptance tests</th></tr></thead>
+      <tbody>
+        <tr><td>Server timestamp for relative freshness</td><td>1</td><td><code>tests/snapshotTimestamp.test.ts</code></td></tr>
+        <tr><td>UX-03, UX-04, UX-07, UX-14, UX-15 derivations</td><td>2</td><td><code>tests/dashboardModel.test.ts</code></td></tr>
+        <tr><td>UX-12 tokens, focus, reduced motion</td><td>3</td><td><code>tests/contrast.test.ts</code></td></tr>
+        <tr><td>UX-01, UX-03, UX-06, UX-13, UX-15</td><td>4</td><td>e2e <code>standings</code> (first two tests)</td></tr>
+        <tr><td>UX-02, UX-05, UX-06, UX-08, UX-10, UX-11</td><td>5</td><td>e2e <code>header and refresh</code></td></tr>
+        <tr><td>UX-04, UX-05, UX-09, UX-13, UX-14</td><td>6</td><td>e2e <code>summary</code></td></tr>
+        <tr><td>UX-04, UX-07</td><td>7</td><td>e2e <code>performance chart</code>, row expansion</td></tr>
+        <tr><td>UX-14 sharing</td><td>8</td><td>e2e <code>sharing</code></td></tr>
+        <tr><td>UX-08, UX-12 responsive and keyboard</td><td>9</td><td>e2e <code>layout and accessibility</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+
+<script>
+// Fixture data (same values as tests/fixtures/snapshotFixture.ts).
+const DATES = ["2025-12-31","2026-03-20","2026-06-22","2026-08-21","2026-09-14","2026-09-21","2026-09-22"];
+const USERS = [
+  ["Singh","MU",[0,40.2,120.5,240.1,262.3,270.0,284.58],"$3,845.80",0],
+  ["Nikhil","ZETA",[0,12.4,30.8,44.0,47.2,50.1,48.79],"$1,487.90",0],
+  ["Saurya","GME",[0,-5.1,3.3,6.9,7.5,8.0,19.87],"$1,198.70",2],
+  ["Adi","AMZN",[0,2.2,6.4,9.8,11.1,12.0,10.67],"$1,106.70",-1],
+  ["Satwik","HOOD",[0,20.5,15.2,11.0,8.4,9.0,9.47],"$1,094.70",-1],
+  ["Vishal","GLDM",[0,3.1,2.4,1.9,1.2,1.5,1.08],"$1,010.80",0],
+  ["Siddu","COIN",[0,-4.4,-8.8,-10.5,-12.1,-13.0,-11.42],"$885.80",1],
+  ["Achu","ASTS",[0,6.6,-2.3,-8.7,-9.4,-10.0,-12.31],"$876.90",-1],
+  ["Nari","SOFI",[0,-10.2,-20.4,-28.8,-31.5,-33.0,-34.22],"$657.80",0],
+];
+const BENCH = { SPY:[0,3.2,7.9,11.4,12.6,13.0,13.46], VT:[0,3.5,8.3,12.1,13.5,14.1,14.42], VTI:[0,3.0,8.1,11.8,13.1,13.5,13.82] };
+const CRYPTO = new Set(["COIN","HOOD","SOFI"]);
+const PALETTE = ["#1266f1","#009e73","#7c3aed","#0891b2","#db2777","#65a30d","#b45309","#4338ca","#e11d48","#c026d3"];
+const ALPHA = USERS.map(u => u[1]).sort();
+const COLOR = Object.fromEntries(USERS.map(u => [u[1], PALETTE[ALPHA.indexOf(u[1])]]));
+Object.assign(COLOR, { SPY:"#ff6b1a", VT:"#f4a800", VTI:"#38bdf8", GROUP:"#6b7280", EX:"#0ea5a8" });
+const SPY = 13.46;
+const r2 = v => Math.round(v * 100) / 100;
+const pct = v => `${v >= 0 ? "+" : "-"}${Math.abs(v).toFixed(2)}%`;
+const pts = v => `${v >= 0 ? "+" : "-"}${Math.abs(v).toFixed(2)} pts`;
+const cls = v => v >= 0 ? "pos" : "neg";
+const dayChange = vals => r2(((1 + vals[6] / 100) / (1 + vals[5] / 100) - 1) * 100);
+
+// Deterministic daily series that pass through the fixture anchors (Brownian bridge).
+let seed = 7; const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const weekdays = (() => { const out = []; const d = new Date(Date.UTC(2025, 11, 31)); while (d <= new Date(Date.UTC(2026, 8, 22))) { const w = d.getUTCDay(); if (w && w < 6) out.push(d.toISOString().slice(0, 10)); d.setUTCDate(d.getUTCDate() + 1); } return out; })();
+function daily(anchors, vol) {
+  const idx = DATES.map(date => weekdays.findIndex(day => day >= date));
+  const out = new Array(weekdays.length).fill(0);
+  for (let s = 0; s < DATES.length - 1; s++) {
+    const a = idx[s], b = idx[s + 1], n = b - a; let walk = [0];
+    for (let k = 1; k <= n; k++) walk.push(walk[k - 1] + (rand() - 0.5) * vol);
+    for (let k = 0; k <= n; k++) out[a + k] = anchors[s] + (anchors[s + 1] - anchors[s]) * (k / n) + (walk[k] - (k / n) * walk[n]);
+  }
+  return out;
+}
+const SERIES = {};
+USERS.forEach(u => SERIES[u[1]] = daily(u[2], u[1] === "MU" ? 9 : u[1] === "GME" ? 4 : 2.4));
+Object.entries(BENCH).forEach(([t, v]) => SERIES[t] = daily(v, 0.9));
+SERIES.GROUP = weekdays.map((_, i) => USERS.reduce((s, u) => s + SERIES[u[1]][i], 0) / USERS.length);
+const exUsers = USERS.filter(u => !CRYPTO.has(u[1]));
+SERIES.EX = weekdays.map((_, i) => exUsers.reduce((s, u) => s + SERIES[u[1]][i], 0) / exUsers.length);
+
+function chartSvg(keys, { w = 1180, h = 360, hover = true, dark = false } = {}) {
+  const m = { t: 12, r: 16, b: 30, l: 52 };
+  const vals = keys.flatMap(k => SERIES[k]).concat([0]);
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  const step = [1, 2, 5, 10, 20, 25, 50, 100].map(x => x).find(s => (hi - lo) / s <= 7) || 100;
+  lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
+  const X = i => m.l + (i / (weekdays.length - 1)) * (w - m.l - m.r);
+  const Y = v => m.t + ((hi - v) / (hi - lo)) * (h - m.t - m.b);
+  let g = "";
+  for (let v = lo; v <= hi + 1e-9; v += step) g += `<line x1="${m.l}" x2="${w - m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="${v === 0 ? "var(--chart-zero)" : "var(--chart-grid)"}" stroke-width="1"/><text x="${m.l - 8}" y="${Y(v) + 4}" text-anchor="end" font-size="11" fill="var(--chart-text)" font-weight="600">${v > 0 ? "+" : ""}${v}%</text>`;
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep"];
+  months.forEach((mo, i) => { const idx = weekdays.findIndex(d => d.slice(5, 7) === String(i + 1).padStart(2, "0")); if (idx > 0 || i === 0) g += `<text x="${X(Math.max(idx, 0))}" y="${h - 8}" text-anchor="middle" font-size="11" fill="var(--chart-text)" font-weight="600">${mo}</text>`; });
+  const lines = keys.map(k => { const dash = ["SPY","VT","VTI"].includes(k) ? `stroke-dasharray="6 4"` : ""; const width = k === "GROUP" || k === "EX" ? 3 : 2; return `<path d="${SERIES[k].map((v, i) => `${i ? "L" : "M"}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`).join(" ")}" fill="none" stroke="${COLOR[k]}" stroke-width="${width}" ${dash} stroke-linejoin="round" stroke-linecap="round"/>`; }).join("");
+  let tip = "";
+  if (hover) { const hi2 = weekdays.length - 12; const x = X(hi2); tip = `<line x1="${x}" x2="${x}" y1="${m.t}" y2="${h - m.b}" stroke="var(--chart-text)" stroke-opacity=".35"/>` + keys.map(k => `<circle cx="${x}" cy="${Y(SERIES[k][hi2])}" r="4" fill="${COLOR[k]}" stroke="var(--surface)" stroke-width="2"/>`).join(""); }
+  return { svg: `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">${g}${lines}${tip}</svg>`, tipX: hover ? X(weekdays.length - 12) / w : 0, tipIdx: weekdays.length - 12 };
+}
+const labelOf = k => { const u = USERS.find(x => x[1] === k); return u ? `${u[0]} (${k})` : k === "GROUP" ? "Group average" : k === "EX" ? "Ex-crypto average" : k; };
+function tooltip(keys, idx, leftPct) {
+  const d = new Date(weekdays[idx] + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  const rows = keys.map(k => [k, SERIES[k][idx]]).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<div><span><i style="background:${COLOR[k]}"></i>${labelOf(k)}</span><b style="margin:0">${pct(v)}</b></div>`).join("");
+  return `<div class="rd-tip" style="left:calc(${(leftPct * 100).toFixed(1)}% - 190px);top:24px"><b>${d}, 2026</b>${rows}</div>`;
+}
+const refreshIcon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>`;
+const chevron = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>`;
+const logoMark = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m3 17 6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>`;
+const tlogo = t => `<span class="rd-logo-t">${t.slice(0, 4)}</span>`;
+const move = n => n > 0 ? `<span class="rd-move up">▲${n}</span>` : n < 0 ? `<span class="rd-move down">▼${-n}</span>` : `<span class="rd-move none">—</span>`;
+const bar = v => { const w = r2(Math.min(Math.abs(v) / 284.58, 1) * 50); return `<span class="rd-div"><span class="${v >= 0 ? "up" : "down"}" style="width:${w}%"></span></span>`; };
+
+function header(mobile, busy = false) {
+  return `<div class="rd-header"><div class="rd-brand"><span class="rd-logo">${logoMark}</span><div><h1>Stock Competition</h1><div class="rd-fresh"><i></i>Updated 3 min ago</div></div></div>
+  <button class="rd-btn${busy ? " busy" : ""}" aria-label="Refresh prices">${refreshIcon}${mobile ? "" : busy ? "Refreshing…" : "Refresh"}</button></div>`;
+}
+function progress() {
+  return `<div class="rd-progress"><strong>Day 265 of 365</strong><span class="rd-bar"><span style="width:72.6%"></span></span><span>100 days left</span><span class="rd-rules">How scoring works ▾</span></div>`;
+}
+function summary() {
+  return `<div class="rd-summary">
+    <div class="rd-leader"><div><div class="rd-kicker">Current leader</div><div class="name">Singh <span class="rd-chip">MU</span></div><div class="vs"><b>+271.12 pts</b> vs SPY</div></div><div class="big"><strong>+284.58%</strong><span>$3,845.80</span></div></div>
+    <div class="rd-tile"><span class="rd-kicker">Group average</span><strong class="pos">+35.17%</strong><small>All 9 picks</small></div>
+    <div class="rd-tile"><span class="rd-kicker">Ex-crypto average</span><strong class="pos">+58.78%</strong><small>Excludes COIN, HOOD, and SOFI</small></div>
+    <div class="rd-tile"><span class="rd-kicker">S&amp;P 500 (SPY)</span><strong class="pos">+13.46%</strong><small>VT +14.42% · VTI +13.82%</small></div>
+    <div class="rd-tile"><span class="rd-kicker">Beating SPY</span><strong>3 of 9</strong><small>Picks ahead of the market</small></div>
+  </div>`;
+}
+function detailsRow(u) {
+  return `<tr class="open"><td colspan="6"><dl class="rd-details"><div><dt>Shares</dt><dd>3.5037</dd></div><div><dt>Dec 31 price</dt><dd>$285.41</dd></div><div><dt>Latest price</dt><dd>$1,097.63</dd></div><div><dt>Quote</dt><dd>Sep 22, 2026, 07:59 PM ET (post-market)</dd></div><button class="rd-btn secondary">Show on chart</button></dl></td></tr>`;
+}
+function standingsTable({ expand = null, delayed = null, rows = USERS } = {}) {
+  const body = rows.map((u, i) => {
+    const [name, t, vals, bal, mv] = u; const ytd = vals[6];
+    const chips = (CRYPTO.has(t) ? `<span class="rd-chip">Crypto-adjacent</span>` : "") + (delayed === t ? `<span class="rd-chip warn">Delayed</span>` : "");
+    const row = `<tr${expand === t ? ` class="open"` : ""}><td><div class="rd-rank"><b>${i + 1}</b>${move(mv)}</div></td>
+      <td><div class="rd-who">${tlogo(t)}<div><button class="rd-toggle">${name} ${chevron}</button><div class="rd-sub">${t}${chips}</div></div></div></td>
+      <td class="r rd-ret ${cls(ytd)}">${pct(ytd)}</td><td class="r ${cls(dayChange(vals))}">${pct(dayChange(vals))}</td><td class="r ${cls(ytd - SPY)}">${pts(r2(ytd - SPY))}</td>
+      <td class="r"><div class="rd-bal"><span>${bal}</span>${bar(ytd)}</div></td></tr>`;
+    return row + (expand === t ? detailsRow(u) : "");
+  }).join("");
+  return `<table class="rd-table"><thead><tr><th>Rank</th><th>Participant</th><th class="r">Return</th><th class="r">Today</th><th class="r">vs SPY</th><th class="r">Balance</th></tr></thead><tbody>${body}</tbody></table>`;
+}
+function standingsMobile({ rows = USERS } = {}) {
+  return rows.map((u, i) => { const [name, t, vals, bal, mv] = u; const ytd = vals[6];
+    return `<div class="rd-mrow"><div class="rank"><b>${i + 1}</b>${move(mv)}</div>
+      <div class="who"><div class="rd-who">${tlogo(t)}<div><button class="rd-toggle">${name} ${chevron}</button><div class="rd-sub">${t}${CRYPTO.has(t) ? `<span class="rd-chip">Crypto-adjacent</span>` : ""}</div></div></div></div>
+      <div class="ret ${cls(ytd)}">${pct(ytd)}</div>
+      <div class="today">Today <b class="${cls(dayChange(vals))}">${pct(dayChange(vals))}</b></div><div class="vs">vs SPY <b class="${cls(ytd - SPY)}">${pts(r2(ytd - SPY))}</b></div><div class="bal">${bal}</div></div>`; }).join("");
+}
+function panel(kicker, title, right, body) {
+  return `<section class="rd-panel"><div class="rd-panel-head"><div><div class="rd-kicker">${kicker}</div><h2>${title}</h2></div><div style="display:flex;gap:8px;align-items:center">${right}</div></div>${body}</section>`;
+}
+function chips(on) {
+  const all = [...USERS.map(u => u[1]), "GROUP", "EX", "SPY", "VT", "VTI"];
+  return `<div class="rd-chips">${all.map(k => { const active = on.includes(k); const dash = ["SPY","VT","VTI"].includes(k); return `<span class="rd-schip${active ? " on" : ""}" style="${active ? `border-color:${COLOR[k]};background:color-mix(in srgb, ${COLOR[k]} 10%, var(--surface))` : ""}"><i class="${dash ? "dash" : ""}" style="background:${COLOR[k]}"></i>${labelOf(k)}</span>`; }).join("")}</div>`;
+}
+function performance(keys, { mobile = false, preset = "Top 3 + SPY", hover = true, width = 1180 } = {}) {
+  const presets = ["Top 3 + SPY", "Everyone", "Group vs market", "Custom"].map(p => `<span class="${p === preset ? "on" : ""}">${p}</span>`).join("");
+  const ranges = ["1W", "1M", "3M", "YTD"].map(r => `<span class="${r === "YTD" ? "on" : ""}">${r}</span>`).join("");
+  const c = chartSvg(keys, { w: mobile ? 366 : width, h: mobile ? 300 : 360, hover: hover && !mobile });
+  const tip = hover && !mobile ? tooltip(keys, c.tipIdx, c.tipX) : "";
+  return panel("Returns since Dec 31, 2025", "Performance", "", `<div class="rd-controls"><div class="rd-seg">${presets}</div><div class="rd-seg">${ranges}</div></div>${chips(keys)}<div class="rd-chart">${c.svg}${tip}</div>`);
+}
+function footer() {
+  return `<footer class="rd-footer"><span>Prices from Yahoo Finance. Returns use the official Dec 31, 2025 close.</span><div class="links"><span>Data details ▸</span><span>GitHub</span></div></footer>`;
+}
+function page({ mobile = false, dark = false } = {}) {
+  const top3 = ["MU", "ZETA", "GME", "SPY"];
+  const standings = panel("Rankings", "Standings", `<button class="rd-btn secondary">Copy standings</button>${mobile ? "" : `<span class="rd-pill">9 picks</span>`}`, mobile ? standingsMobile() : standingsTable());
+  return `<div class="rd${dark ? " dark" : ""}${mobile ? " m" : ""}">${header(mobile)}<div class="rd-main">${progress()}${summary()}${standings}${performance(top3, { mobile })}</div>${footer()}</div>`;
+}
+
+document.getElementById("desktop-stage").innerHTML = page();
+document.getElementById("mobile-light").innerHTML = page({ mobile: true });
+document.getElementById("mobile-dark").innerHTML = page({ mobile: true, dark: true });
+
+const frame = inner => `<div class="scaler" data-width="760" style="border:1px solid #d8e0ec;border-radius:10px"><div class="stage" style="width:760px"><div class="rd">${inner}</div></div></div>`;
+document.getElementById("st-error").innerHTML = frame(`<div class="rd-main" style="padding:14px"><div class="rd-notice err" role="alert"><span>Couldn't refresh prices. Showing data from Sep 22, 2026, 07:15 PM EDT.</span><button class="rd-btn secondary">Try again</button></div>${panel("Rankings", "Standings", "", standingsTable({ rows: USERS.slice(0, 3) }))}</div>`);
+document.getElementById("st-busy").innerHTML = frame(header(false, true) + `<div style="padding:14px;font-size:.8rem;color:var(--text-muted)">Button: <code>disabled</code>, <code>aria-busy="true"</code>, spinner icon (static under reduced motion).</div>`);
+document.getElementById("st-degraded").innerHTML = frame(`<div class="rd-main" style="padding:14px"><div class="rd-notice warn" role="status"><span style="color:var(--warning);font-weight:900">!</span><span>Live quote unavailable for ASTS. That row uses the latest daily close and shows a Delayed badge.</span></div>${panel("Rankings", "Standings", "", standingsTable({ rows: USERS.slice(6, 8), delayed: "ASTS" }))}</div>`);
+document.getElementById("st-details").innerHTML = frame(`<div class="rd-main" style="padding:14px">${panel("Rankings", "Standings", "", standingsTable({ rows: USERS.slice(0, 2), expand: "MU" }))}</div>`);
+document.getElementById("st-loading").innerHTML = frame(`<div class="rd-main" style="padding:14px"><div style="font-size:.84rem;color:var(--text-muted)">Building today's snapshot. Retrying in 15 seconds.</div><div class="rd-skel" style="height:8px"></div><div style="display:grid;grid-template-columns:1.6fr repeat(4,1fr);gap:8px"><div class="rd-skel" style="height:80px"></div><div class="rd-skel" style="height:80px"></div><div class="rd-skel" style="height:80px"></div><div class="rd-skel" style="height:80px"></div><div class="rd-skel" style="height:80px"></div></div>${Array.from({ length: 4 }, () => `<div class="rd-skel" style="height:40px"></div>`).join("")}</div>`);
+document.getElementById("st-market").innerHTML = frame(`<div class="rd-main" style="padding:14px"><div style="display:flex;justify-content:flex-end"><button class="rd-btn secondary">✓ Copied</button></div>${performance(["GROUP", "EX", "SPY", "VT", "VTI"], { preset: "Group vs market", hover: false, width: 690 })}</div>`);
+
+function fit() {
+  document.querySelectorAll(".scaler").forEach(scaler => {
+    const stage = scaler.querySelector(".stage"); const scale = scaler.clientWidth / Number(scaler.dataset.width);
+    stage.style.transform = `scale(${scale})`; scaler.style.height = `${stage.scrollHeight * scale}px`;
+  });
+}
+addEventListener("resize", fit); fit();
+</script>
+</body>
+</html>

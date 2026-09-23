@@ -13,6 +13,7 @@ function makeSnapshot(label: string): SnapshotResponse {
     filtered_avg_history: [],
     histories: {},
     updated_at: label,
+    updated_at_iso: "2026-09-22T23:15:00.000Z",
     data_provider: "Alpha Vantage",
   };
 }
