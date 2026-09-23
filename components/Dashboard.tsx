@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AppFooter } from "@/components/dashboard/AppFooter";
 import { AppHeader } from "@/components/dashboard/AppHeader";
 import { CompetitionProgress } from "@/components/dashboard/CompetitionProgress";
+import { CopyStandingsButton } from "@/components/dashboard/CopyStandingsButton";
 import { DataNotice } from "@/components/dashboard/DataNotice";
 import { cryptoTickers, formatList } from "@/components/dashboard/format";
 import { LoadError, LoadingSkeleton, RefreshError } from "@/components/dashboard/PageStates";
@@ -61,7 +62,7 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
             {data.refreshError ? <RefreshError updatedAt={snapshot.updated_at} onRetry={data.refresh} /> : null}
             <SummaryRow snapshot={snapshot} />
             <DataNotice snapshot={snapshot} />
-            <StandingsTable snapshot={snapshot} onShowOnChart={showOnChart} />
+            <StandingsTable snapshot={snapshot} onShowOnChart={showOnChart} actions={<CopyStandingsButton snapshot={snapshot} />} />
             <PerformanceChart
               snapshot={snapshot}
               preset={preset}
