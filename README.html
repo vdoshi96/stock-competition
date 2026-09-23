@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Stock Competition (Vercel Rebuild)</title>
+  <title>Stock Competition</title>
   <style>
     :root { color-scheme: light dark; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     body { margin: 0; color: CanvasText; background: Canvas; line-height: 1.6; }
@@ -26,9 +26,10 @@
 </head>
 <body>
   <a class="skip-link" href="#document">Skip to content</a>
-  <main id="document" aria-label="Stock Competition (Vercel Rebuild)">
-<h1>Stock Competition (Vercel Rebuild)</h1>
+  <main id="document" aria-label="Stock Competition">
+<h1>Stock Competition</h1>
 <p>Ground-up rebuild of the stock competition tracker as a Next.js app with Vercel API routes.</p>
+<p>Live dashboard: <a href="https://stock-competition-blush.vercel.app">Stock Competition</a>.<br>The previous <code>stock-competition-zeta.vercel.app</code> address redirects to this production domain.<br>Both domains belong to the <code>stock-competition</code> Vercel project, which deploys from GitHub <code>main</code>.</p>
 <h2>What this rebuild fixes</h2>
 <ul>
 <li>Removes the old Flask template monolith.</li>
@@ -43,7 +44,12 @@
 <li>Group average is mean of all user YTD returns.</li>
 <li>Filtered average excludes <code>COIN</code>, <code>HOOD</code>, and <code>SOFI</code>.</li>
 <li>Benchmarks remain <code>SPY</code>, <code>VT</code>, <code>VTI</code>.</li>
-<li>Balance projection remains <code>$1000 * (1 + ytd/100)</code>.</li>
+<li>Each position starts with $1,000 in fractional shares. Balance is <code>$1000 * latest_price / baseline_price</code>, rounded to cents only after calculation.</li>
+<li>Returns and averages use full precision before rounding for display. Share quantities display up to four decimal places.</li>
+<li>Daily charts use unadjusted regular-session closes from Yahoo&#39;s chart endpoint, anchored to the locked baseline. Invalid closing-price rows are skipped.</li>
+<li>The latest quote replaces the point on its New York calendar date. The page shows Eastern Time for refresh and quote timestamps.</li>
+<li>If live quotes fail, dated daily closes supply consistent prices and valuations. Missing histories are flagged and omitted; group histories require every member&#39;s price on that date.</li>
+<li>Missing baselines or valuations reject the refresh, retaining an available cached snapshot rather than publishing zero returns.</li>
 </ul>
 <h2>Local setup</h2>
 <ol>
@@ -51,9 +57,9 @@
 <li>Install and run:</li>
 </ol>
 <pre><code class="language-bash">npm install
-npm run baseline:generate
 npm run dev
 </code></pre>
+<p><code>baseline_prices.json</code> contains the official December 31, 2025 prices. Preserve it for this competition; <code>npm run baseline:generate</code> is an administrative regeneration command.</p>
 <h2>API routes</h2>
 <ul>
 <li><code>GET /api/snapshot</code> - main data payload.</li>
@@ -62,6 +68,7 @@ npm run dev
 <li><code>GET /api/health</code> - cache and readiness status.</li>
 </ul>
 <h2>Vercel deployment</h2>
+<p>Use <code>https://stock-competition-blush.vercel.app</code> for the repository homepage and shared live links. The legacy <code>zeta</code> domain has a project-level permanent redirect, so it continues working across deployments.</p>
 <ul>
 <li>Framework preset: Next.js</li>
 <li>Build command: <code>npm run build</code></li>
@@ -71,6 +78,9 @@ npm run dev
 </ul>
 </li>
 </ul>
+<h2>Verification</h2>
+<p>Run <code>npm run lint</code>, <code>npm test</code>, and <code>npm run build</code> before merging. Regression tests cover partially null Yahoo rows, full-precision calculations, Eastern Time quote dates, provider-call counts, and incomplete-data handling.</p>
+<p>After deployment, run <code>npm run verify:live -- https://stock-competition-blush.vercel.app</code>. The check compares every displayed metric and chart point with the locked baseline and independently fetched Yahoo data. It saves the verification summary in <code>output/playwright/metrics-verification.json</code>.</p>
 <h2>Documentation</h2>
 <p>Tracked project-owned prose sources are canonical. The inventory is index-based so private untracked notes remain untouched; stage a new project-owned source before regenerating its deterministic same-directory HTML companion:</p>
 <pre><code class="language-bash">npm run docs:generate

@@ -19,14 +19,38 @@ export async function computeSnapshot(): Promise<SnapshotResponse> {
   ]);
 
   const mergedSeries: Record<string, PricePoint[] | null> = {};
+  const historyFailures: string[] = [];
   for (const ticker of uniqueTickers) {
     const history = yahooData.seriesByTicker[ticker] ?? [];
-    const latest = yahooData.latestByTicker[ticker];
+    let latest = yahooData.latestByTicker[ticker];
     const baseline = baselineByTicker[ticker];
 
-    if (history.length === 0 && baseline == null && latest == null) {
-      mergedSeries[ticker] = null;
-      continue;
+    if (baseline == null || !Number.isFinite(baseline) || baseline <= 0) {
+      throw new Error(`Missing locked baseline for ${ticker}`);
+    }
+    if (history.length === 0) historyFailures.push(ticker);
+
+    // Keep the displayed price and valuation consistent when live quotes fail.
+    const lastClose = history.at(-1);
+    const quoteTime = yahooData.quoteMetaByTicker[ticker]?.timestamp;
+    let latestDate = quoteTime
+      ? new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date(quoteTime))
+      : undefined;
+    if (lastClose && (latest == null || !Number.isFinite(latest) || latest <= 0 || !latestDate || latestDate < lastClose.date)) {
+      latest = lastClose.close;
+      latestDate = lastClose.date;
+      yahooData.latestByTicker[ticker] = latest;
+      if (!yahooData.quoteFailures.includes(ticker)) yahooData.quoteFailures.push(ticker);
+      yahooData.quoteMetaByTicker[ticker] = {
+        price: latest,
+        timestamp: null,
+        label: `${lastClose.date} regular-session close (live quote unavailable)`,
+        session: "daily-close",
+        source: "chart",
+      };
+    }
+    if (latest == null || !Number.isFinite(latest) || latest <= 0) {
+      throw new Error(`No usable price for ${ticker}`);
     }
 
     const map = new Map<string, number>();
@@ -34,13 +58,9 @@ export async function computeSnapshot(): Promise<SnapshotResponse> {
       map.set(point.date, point.close);
     }
 
-    if (baseline != null && Number.isFinite(baseline)) {
-      map.set(baselineDate, baseline);
-    }
-    if (latest != null && Number.isFinite(latest)) {
-      const latestDate = new Date().toISOString().slice(0, 10);
-      map.set(latestDate, latest);
-    }
+    map.set(baselineDate, baseline);
+    if (!latestDate || latestDate <= baselineDate) throw new Error(`No dated competition price for ${ticker}`);
+    map.set(latestDate, latest);
 
     const points: PricePoint[] = [...map.entries()]
       .map(([date, close]) => ({ date, close }))
@@ -58,6 +78,7 @@ export async function computeSnapshot(): Promise<SnapshotResponse> {
       baselineByTicker,
       quoteMetaByTicker: yahooData.quoteMetaByTicker,
       quoteFailures: yahooData.quoteFailures,
+      historyFailures,
       fetchStats: yahooData.stats,
     }
   );

@@ -8,4 +8,6 @@ out/
 .vercel/
 coverage/
 *.log
-
+.playwright-cli/
+output/
+*.tsbuildinfo

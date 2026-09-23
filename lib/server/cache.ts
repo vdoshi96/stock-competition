@@ -70,7 +70,7 @@ export async function getOrRefreshSnapshot(
 
   if (!force && cache.snapshot && timestamp < cache.staleUntil) {
     if (!cache.refreshing) {
-      void refresh(refresher);
+      void refresh(refresher).catch(() => undefined);
     }
     return { snapshot: cache.snapshot, state: "stale" };
   }

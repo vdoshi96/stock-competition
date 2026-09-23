@@ -21,24 +21,22 @@ function formatUpdatedAt(date = new Date()): string {
     hour: "2-digit",
     minute: "2-digit",
     hour12: true,
+    timeZone: "America/New_York",
+    timeZoneName: "short",
   }).format(date);
 }
 
-function seriesToScaledHistory(points: PricePoint[], targetYtd: number): SeriesPoint[] {
+function seriesToHistory(points: PricePoint[]): SeriesPoint[] {
   if (points.length < 2) {
     return [];
   }
 
   const firstClose = points[0].close;
-  const lastClose = points[points.length - 1].close;
-  const nativeYtd = ((lastClose - firstClose) / firstClose) * 100;
-  const scale = Math.abs(nativeYtd) > 0.01 ? targetYtd / nativeYtd : 1;
-
   return points.map((point) => {
     const rawReturn = ((point.close - firstClose) / firstClose) * 100;
     return {
       date: point.date,
-      value: round2(rawReturn * scale),
+      value: rawReturn,
     };
   });
 }
@@ -52,14 +50,16 @@ export function buildSnapshotResponse(
     baselineByTicker?: Record<string, number | null>;
     quoteMetaByTicker?: Record<string, QuoteMeta>;
     quoteFailures?: string[];
+    historyFailures?: string[];
     fetchStats?: MarketDataStats;
-  } = "Alpha Vantage"
+  } = "Yahoo Finance"
 ): SnapshotResponse {
-  const providerLabel = typeof options === "string" ? options : options.providerLabel ?? "Alpha Vantage";
+  const providerLabel = typeof options === "string" ? options : options.providerLabel ?? "Yahoo Finance";
   const latestByTicker = typeof options === "string" ? {} : options.latestByTicker ?? {};
   const baselineByTicker = typeof options === "string" ? {} : options.baselineByTicker ?? {};
   const quoteMetaByTicker = typeof options === "string" ? {} : options.quoteMetaByTicker ?? {};
   const quoteFailures = typeof options === "string" ? [] : options.quoteFailures ?? [];
+  const historyFailures = typeof options === "string" ? [] : options.historyFailures ?? [];
   const fetchStats = typeof options === "string" ? undefined : options.fetchStats;
   const allUserTickers = picks.map((pick) => pick.ticker);
   const ytdReturns: Record<string, number> = {};
@@ -70,12 +70,11 @@ export function buildSnapshotResponse(
     if (points && points.length >= 2) {
       const first = points[0].close;
       const last = points[points.length - 1].close;
-      const primaryYtd = round2(((last - first) / first) * 100);
+      const primaryYtd = ((last - first) / first) * 100;
       ytdReturns[ticker] = primaryYtd;
-      histories[ticker] = seriesToScaledHistory(points, primaryYtd);
+      histories[ticker] = historyFailures.includes(ticker) ? [] : seriesToHistory(points);
     } else {
-      ytdReturns[ticker] = 0;
-      histories[ticker] = [];
+      throw new Error(`Missing baseline or valuation for ${ticker}`);
     }
   }
 
@@ -88,7 +87,7 @@ export function buildSnapshotResponse(
     return {
       name: pick.name,
       ticker: pick.ticker,
-      ytd_return: ytd,
+      ytd_return: round2(ytd),
       balance: round2(STARTING_BALANCE * (1 + ytd / 100)),
       crypto_adjacent: CRYPTO_ADJACENT.has(pick.ticker),
       baseline_price: baseline,
@@ -98,10 +97,10 @@ export function buildSnapshotResponse(
       quote_session: quoteMeta?.session ?? null,
     };
   });
-  users.sort((a, b) => b.ytd_return - a.ytd_return);
+  users.sort((a, b) => ytdReturns[b.ticker] - ytdReturns[a.ticker]);
 
-  const allReturns = users.map((user) => user.ytd_return);
-  const filteredReturns = users.filter((user) => !user.crypto_adjacent).map((user) => user.ytd_return);
+  const allReturns = users.map((user) => ytdReturns[user.ticker]);
+  const filteredReturns = users.filter((user) => !user.crypto_adjacent).map((user) => ytdReturns[user.ticker]);
 
   const groupAvg = allReturns.length > 0 ? round2(allReturns.reduce((sum, value) => sum + value, 0) / allReturns.length) : 0;
   const filteredAvg =
@@ -116,7 +115,7 @@ export function buildSnapshotResponse(
     const quoteMeta = quoteMetaByTicker[ticker];
     return {
       ticker,
-      ytd_return: ytd,
+      ytd_return: round2(ytd),
       balance: round2(STARTING_BALANCE * (1 + ytd / 100)),
       baseline_price: baseline,
       latest_price: latest,
@@ -155,13 +154,13 @@ export function buildSnapshotResponse(
       }
     }
 
-    if (allValues.length > 0) {
+    if (allValues.length === picks.length && allValues.length > 0) {
       groupAvgHistory.push({
         date,
         value: round2(allValues.reduce((sum, value) => sum + value, 0) / allValues.length),
       });
     }
-    if (filteredValues.length > 0) {
+    if (filteredValues.length === filteredReturns.length && filteredValues.length > 0) {
       filteredAvgHistory.push({
         date,
         value: round2(filteredValues.reduce((sum, value) => sum + value, 0) / filteredValues.length),
@@ -176,11 +175,14 @@ export function buildSnapshotResponse(
     filtered_avg: filteredAvg,
     group_avg_history: groupAvgHistory,
     filtered_avg_history: filteredAvgHistory,
-    histories,
+    histories: Object.fromEntries(Object.entries(histories).map(([ticker, points]) => [
+      ticker, points.map((point) => ({ ...point, value: round2(point.value) })),
+    ])),
     updated_at: formatUpdatedAt(),
     data_provider: providerLabel,
     quote_meta: quoteMetaByTicker,
     quote_failures: quoteFailures,
+    history_failures: historyFailures,
     fetch_stats: fetchStats,
   };
 }

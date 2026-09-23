@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   fetchLatestQuoteMap,
+  fetchDailySeriesAndLatestMap,
   normalizeTickerSymbol,
   pickBestQuotePrice,
 } from "@/lib/server/marketData";
@@ -11,6 +12,35 @@ describe("normalizeTickerSymbol", () => {
     expect(normalizeTickerSymbol("  $aapl ")).toBe("AAPL");
     expect(normalizeTickerSymbol("msft")).toBe("MSFT");
     expect(normalizeTickerSymbol("BTC-USD")).toBe("BTC-USD");
+  });
+});
+
+describe("daily chart history", () => {
+  it("keeps usable daily closes when Yahoo returns a partially null row", async () => {
+    const chart = vi.fn(async () => ({ quotes: [
+      { date: new Date("2026-01-02T14:30:00Z"), close: 100 },
+      { date: new Date("2026-01-05T14:30:00Z"), close: 102 },
+      { date: new Date("2026-01-06T14:30:00Z"), close: null },
+    ] }));
+    const quote = vi.fn(async () => ({ AAA: { regularMarketPrice: 103 } }));
+    const result = await fetchDailySeriesAndLatestMap(["AAA"], 2026, { chart, quote });
+    expect(result.seriesByTicker.AAA).toEqual([
+      { date: "2026-01-02", close: 100 },
+      { date: "2026-01-05", close: 102 },
+    ]);
+    expect(chart).toHaveBeenCalledWith("AAA", expect.objectContaining({ interval: "1d", includePrePost: false }));
+    expect(result.stats.actualApiCalls).toBe(2);
+  });
+
+  it("counts retried history requests and both chart fallback attempts", async () => {
+    const chart = vi.fn(async (_ticker, options) => {
+      if (options.interval === "1m" || chart.mock.calls.length === 1) throw new Error("temporary provider failure");
+      return { quotes: [{ date: new Date("2026-09-22T13:30:00Z"), close: 105 }] };
+    });
+    const quote = vi.fn(async () => ({}));
+    const result = await fetchDailySeriesAndLatestMap(["AAA"], 2026, { chart, quote });
+    expect(result.stats).toMatchObject({ historyApiCalls: 2, quoteApiCalls: 1, fallbackApiCalls: 2, actualApiCalls: 5 });
+    expect(chart).toHaveBeenCalledTimes(4);
   });
 });
 

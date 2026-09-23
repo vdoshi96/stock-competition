@@ -7,7 +7,8 @@
 - The market-data path separates history and quote phases. It starts one historical fetch task per ticker, with up to three attempts inside a task, and batches multi-symbol quote requests in chunks of up to 50 symbols.
 - Historical requests use `YAHOO_HISTORY_MAX_CONCURRENCY = 16`; targeted chart fallbacks use a separate concurrency limit of 8.
 - Quote selection uses the freshest valid post-market, pre-market, extended-hours, or regular-market candidate, then falls back to intraday and daily chart data when needed.
-- Snapshot responses include logical fetch-task counters, timing, quote metadata, and unresolved quote failures. History retries and the intraday-to-daily chart fallback can make additional provider calls beyond those counters.
+- Snapshot responses include provider data-request counters, timing, quote metadata, unresolved quote failures, and missing histories. Counters include history retries and both chart fallback attempts; they exclude the library's authentication requests.
+- Daily history uses `chart(..., { interval: "1d" })` and discards invalid closing-price rows. The deprecated `historical()` compatibility wrapper rejects the entire result when a row contains some null fields.
 - Current baseline data is anchored to `2025-12-31`; `scripts/generate-baseline.mjs` uses the same date. This is the official baseline for the current competition and should be preserved.
 
 ## Reference implementation
@@ -24,7 +25,7 @@
 | Area | Primary repo | Reference repo |
 | --- | --- | --- |
 | Latest quote calls | Multi-symbol `yahooFinance.quote(symbols)` batches, plus targeted chart fallbacks | Many latest quote requests in parallel |
-| Daily history calls | One logical history task per symbol, run concurrently with up to three attempts per task | Parallel yfinance bulk download |
+| Daily history calls | One daily chart task per symbol, run concurrently with up to three attempts per task | Parallel yfinance bulk download |
 | Concurrency | 16 history tasks and 8 targeted fallback tasks | 16 latest-price workers plus yfinance threaded history |
 | Live quote accuracy | Freshest extended-hours or regular quote, with chart fallbacks | Freshest extended-hours or regular quote, with fallbacks |
 | Baseline | Dec. 31, 2025 official current-competition baseline | Feb. 27, 2026 regular close |
@@ -42,7 +43,7 @@ Before the batching work, the primary app combined history and quote fetching in
 - Per-symbol history fetching runs at reference-aligned concurrency without a quote request inside each history task.
 - Latest-price selection chooses the newest valid post-market, pre-market, extended-market, or regular-market candidate, then falls back to intraday or daily chart data if a batch quote lacks a usable price.
 - Symbols are normalized at input boundaries and remain normalized through baseline, market data, and UI calculations.
-- Fetch statistics make cold-snapshot logical task counters and timing visible.
+- Fetch statistics report data-request attempts, including retries, and total fetch duration.
 - Quote failures are surfaced in the UI instead of silently presenting possibly stale values.
 - Preserve the Dec. 31, 2025 baseline generation and baseline file because that is the official current-competition anchor.
 
@@ -69,6 +70,12 @@ Before the batching work, the primary app combined history and quote fetching in
 - Confirm dark mode colors remain readable under `prefers-color-scheme: dark`.
 
 ## Verification notes
+
+- September 22, 2026 diagnosis: GitHub's homepage pointed to an unassigned `stock-competition-zeta.vercel.app` domain, which returned `DEPLOYMENT_NOT_FOUND`. The active production domain was `stock-competition-blush.vercel.app`. GitHub now uses the active domain, and the legacy domain redirects there.
+- The same investigation found every deployed chart had only the baseline and latest quote. A partially null Yahoo daily row caused the legacy history wrapper to reject every ticker's history. Direct daily chart requests preserve valid closes.
+- Balances and averages retain full precision until display. Historical returns are not scaled to a rounded endpoint. Latest quote dates and refresh labels use Eastern Time.
+- Failed histories are reported and omitted. Group history includes only dates with all required participants, so a missing series cannot silently change the group composition.
+- `npm run verify:live` checks production metrics and history against fresh Yahoo responses and writes the retained QA summary.
 
 - `GET /api/snapshot` local smoke result on May 9, 2026: 12 requested symbols, 12 unique symbols, 1 batched quote call, 12 history calls, 0 fallback calls, 13 actual Yahoo calls vs. 24 estimated previous calls.
 - Automated tests cover symbol normalization, quote freshness selection, batch quote request count, chart fallback behavior, cache behavior, and competition math.

@@ -1,7 +1,6 @@
 import pLimit from "p-limit";
 import YahooFinance from "yahoo-finance2";
 import type { ChartOptionsWithReturnArray } from "yahoo-finance2/modules/chart";
-import type { HistoricalOptionsEventsHistory } from "yahoo-finance2/modules/historical";
 import type { QuoteField, QuoteOptionsWithReturnObject } from "yahoo-finance2/modules/quote";
 
 import {
@@ -14,12 +13,10 @@ import type { MarketDataStats, PricePoint, QuoteMeta, QuoteSession } from "@/lib
 
 type MarketQuote = Record<string, unknown>;
 type QuoteObject = Record<string, MarketQuote>;
-type HistoricalRow = { date?: Date; close?: number };
 type ChartRow = { date?: Date; close?: number | null };
 type ChartResult = { quotes?: ChartRow[] };
 
 export type MarketDataClient = {
-  historical: (ticker: string, options: HistoricalOptionsEventsHistory) => Promise<unknown[]>;
   quote: (tickers: string[], options: QuoteOptionsWithReturnObject) => Promise<QuoteObject | MarketQuote[]>;
   chart: (ticker: string, options: ChartOptionsWithReturnArray) => Promise<ChartResult>;
 };
@@ -47,7 +44,6 @@ function sleep(ms: number): Promise<void> {
 
 const yahooFinance = new YahooFinance({ suppressNotices: ["yahooSurvey"] });
 const defaultClient: MarketDataClient = {
-  historical: (ticker, options) => yahooFinance.historical(ticker, options),
   quote: (tickers, options) => yahooFinance.quote(tickers, options),
   chart: (ticker, options) => yahooFinance.chart(ticker, options),
 };
@@ -108,10 +104,10 @@ function formatQuoteLabel(date: Date | null, session: QuoteSession): string {
   return `${formatted} ET (${session})`;
 }
 
-function parseHistorical(rows: unknown[]): PricePoint[] {
+function parseHistorical(rows: ChartRow[]): PricePoint[] {
   const parsed: PricePoint[] = [];
-  for (const row of rows as HistoricalRow[]) {
-    if (!row?.date || !isPositiveFinite(row.close)) {
+  for (const row of rows) {
+    if (!row?.date || !Number.isFinite(row.date.getTime()) || !isPositiveFinite(row.close)) {
       continue;
     }
     parsed.push({
@@ -218,20 +214,24 @@ function latestFromChart(symbol: string, result: ChartResult): QuoteMeta | null 
 async function fetchTickerHistoryWithRetry(
   ticker: string,
   year: number,
-  client: MarketDataClient
+  client: MarketDataClient,
+  onAttempt: () => void
 ): Promise<PricePoint[] | null> {
   const period1 = `${year}-01-01`;
   const period2 = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
   for (let attempt = 1; attempt <= YAHOO_MAX_RETRIES; attempt += 1) {
     try {
-      const historyRows = await client.historical(ticker, {
+      onAttempt();
+      const result = await client.chart(ticker, {
         period1,
         period2,
         interval: "1d",
+        return: "array",
+        includePrePost: false,
       });
 
-      const history = parseHistorical(historyRows);
+      const history = parseHistorical(result.quotes ?? []);
       if (history.length < 1) {
         throw new Error("No valid Yahoo historical data");
       }
@@ -260,8 +260,7 @@ async function fetchDailySeriesMap(
   let historyApiCalls = 0;
   const tasks = symbols.map((ticker) =>
     limit(async () => {
-      historyApiCalls += 1;
-      const history = await fetchTickerHistoryWithRetry(ticker, year, client);
+      const history = await fetchTickerHistoryWithRetry(ticker, year, client, () => { historyApiCalls += 1; });
       return [ticker, history] as const;
     })
   );
@@ -275,18 +274,23 @@ async function fetchDailySeriesMap(
 
 async function fetchChartFallback(
   ticker: string,
-  client: MarketDataClient
+  client: MarketDataClient,
+  onAttempt: () => void
 ): Promise<QuoteMeta | null> {
   try {
+    onAttempt();
     const result = await client.chart(ticker, {
-      period1: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
+      period1: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
       period2: new Date(Date.now() + 24 * 60 * 60 * 1000),
       interval: "1m",
       includePrePost: true,
     });
-    return latestFromChart(ticker, result);
+    const latest = latestFromChart(ticker, result);
+    if (!latest) throw new Error(`No usable intraday price for ${ticker}`);
+    return latest;
   } catch (intradayError) {
     try {
+      onAttempt();
       const result = await client.chart(ticker, {
         period1: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
         period2: new Date(Date.now() + 24 * 60 * 60 * 1000),
@@ -346,8 +350,7 @@ export async function fetchLatestQuoteMap(
     await Promise.all(
       [...missing].map((ticker) =>
         limit(async () => {
-          fallbackApiCalls += 1;
-          const fallback = await fetchChartFallback(ticker, client as MarketDataClient);
+          const fallback = await fetchChartFallback(ticker, client, () => { fallbackApiCalls += 1; });
           if (!fallback) {
             return;
           }

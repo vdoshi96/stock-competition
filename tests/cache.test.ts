@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { __resetCacheForTests, getOrRefreshSnapshot } from "@/lib/server/cache";
+import { __resetCacheForTests, getCacheHealth, getOrRefreshSnapshot } from "@/lib/server/cache";
 import type { SnapshotResponse } from "@/lib/types";
 
 function makeSnapshot(label: string): SnapshotResponse {
@@ -47,5 +47,20 @@ describe("cache", () => {
 
     expect(result.snapshot?.updated_at).toBe("fresh");
     expect(result.state).toBe("stale");
+  });
+
+  it("records a background refresh failure without an unhandled rejection", async () => {
+    const time = vi.spyOn(Date, "now");
+    try {
+      time.mockReturnValue(1000);
+      await getOrRefreshSnapshot(async () => makeSnapshot("cached"));
+      time.mockReturnValue(361000);
+      const result = await getOrRefreshSnapshot(async () => { throw new Error("provider down"); });
+      expect(result.state).toBe("stale");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(getCacheHealth()).toMatchObject({ lastError: "provider down", refreshing: false, hasSnapshot: true });
+    } finally {
+      time.mockRestore();
+    }
   });
 });
