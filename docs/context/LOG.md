@@ -11,4 +11,4 @@
 ## September 22, 2026: UI/UX redesign
 
 - Implemented the audit in `docs/design/ui-ux-audit.html`: unified standings, summary tiles, competition progress, a preset-driven performance chart, resilient refresh states, copy standings, and AA contrast.
-- Verification: lint, type check, 62 unit tests, build, 17 end-to-end tests, and documentation parity passed. Production checks are pending the authorized merge.
+- Verification: lint, type check, 62 unit tests, build, 17 end-to-end tests, and documentation parity passed. Production returned HTTP 200, and `npm run verify:live -- https://stock-competition-blush.vercel.app` passed for nine participants, three benchmarks, and 2,548 chart points after PR #9 deployed.
