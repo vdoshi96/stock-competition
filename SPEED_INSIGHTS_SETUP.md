@@ -9,7 +9,7 @@ Speed Insights is not currently integrated in repository source:
 - `@vercel/speed-insights` is not listed in the package manifests.
 - `app/layout.tsx` does not render the `SpeedInsights` component.
 - No tracked Vercel configuration customizes Speed Insights.
-- Whether Speed Insights is enabled for the linked Vercel project cannot be determined from this repository.
+- The Vercel project API returned a Speed Insights ID with `hasData: false` on September 22, 2026. Repository source alone does not establish dashboard enablement or successful reporting.
 
 A legacy Flask version imported the version 1 client from a CDN in `templates/index.html`. That template was deleted during the Next.js rebuild. Do not restore the CDN snippet.
 

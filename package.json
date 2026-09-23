@@ -12,7 +12,8 @@
     "test": "vitest run",
     "docs:generate": "node scripts/generate-docs.mjs --write",
     "docs:check": "node scripts/generate-docs.mjs --check",
-    "baseline:generate": "node scripts/generate-baseline.mjs"
+    "baseline:generate": "node scripts/generate-baseline.mjs",
+    "verify:live": "node scripts/verify-live.mjs"
   },
   "keywords": [],
   "author": "",

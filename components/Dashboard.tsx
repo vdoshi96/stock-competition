@@ -28,12 +28,6 @@ const BENCH_COLORS: Record<string, string> = {
 const GROUP_AVG_COLOR = "#6b7280";
 const FILTERED_AVG_COLOR = "#0ea5a8";
 
-type PercentAxisBreak = {
-  from: number;
-  to: number;
-  ratio: number;
-};
-
 type PercentAxisScale = {
   min: number | undefined;
   max: number | undefined;
@@ -145,53 +139,19 @@ function TickerLogo({ ticker }: { ticker: string }) {
   );
 }
 
-function createPercentAxisBreak(values: number[]): PercentAxisBreak | null {
-  const finite = values.filter((value) => Number.isFinite(value)).sort((a, b) => a - b);
-  if (finite.length < 8) return null;
-  const max = finite[finite.length - 1];
-  const median = finite[Math.floor(finite.length / 2)];
-  return max >= 30 && max - median >= 16 ? { from: 18, to: 28, ratio: 0.24 } : null;
-}
-
-function transformPercent(value: number | null, axisBreak: PercentAxisBreak | null): number | null {
-  if (value == null || !axisBreak) return value;
-  if (value <= axisBreak.from) return value;
-  if (value < axisBreak.to) {
-    return axisBreak.from + (value - axisBreak.from) * axisBreak.ratio;
-  }
-  return axisBreak.from + (axisBreak.to - axisBreak.from) * axisBreak.ratio + (value - axisBreak.to);
-}
-
-function createPercentAxisScale(values: number[], axisBreak: PercentAxisBreak | null): PercentAxisScale {
+function createPercentAxisScale(values: number[]): PercentAxisScale {
   const finite = values.filter((value) => Number.isFinite(value));
   if (finite.length === 0) return { min: undefined, max: undefined, ticks: [] };
-  const minTick = Math.floor(Math.min(0, Math.min(...finite)) / 5) * 5;
-  const maxTick = Math.ceil(Math.max(0, Math.max(...finite)) / 5) * 5;
-
-  if (!axisBreak) {
-    const ticks = [];
-    for (let tick = minTick; tick <= maxTick; tick += 5) ticks.push(tick);
-    return { min: minTick, max: maxTick, ticks };
-  }
-
+  const low = Math.min(0, ...finite);
+  const high = Math.max(0, ...finite);
+  const roughStep = Math.max(1, (high - low) / 6);
+  const magnitude = 10 ** Math.floor(Math.log10(roughStep));
+  const step = ([1, 2, 5, 10].find((factor) => factor * magnitude >= roughStep) ?? 10) * magnitude;
+  const minTick = Math.floor(low / step) * step;
+  const maxTick = Math.max(minTick + step, Math.ceil(high / step) * step);
   const ticks = [];
-  for (let tick = minTick; tick <= Math.min(axisBreak.from, maxTick); tick += 5) {
-    ticks.push(tick);
-  }
-  ticks.push(axisBreak.from, axisBreak.to);
-  for (let tick = Math.ceil(axisBreak.to / 5) * 5; tick <= maxTick; tick += 5) {
-    ticks.push(tick);
-  }
-
-  const uniqueTicks = [...new Set(ticks)]
-    .filter((tick) => tick >= minTick && tick <= maxTick)
-    .sort((a, b) => a - b);
-
-  return {
-    min: transformPercent(minTick, axisBreak) ?? minTick,
-    max: transformPercent(maxTick, axisBreak) ?? maxTick,
-    ticks: uniqueTicks,
-  };
+  for (let tick = minTick; tick <= maxTick; tick += step) ticks.push(tick);
+  return { min: minTick, max: maxTick, ticks };
 }
 
 function ValueRaceChart({ users }: { users: SnapshotUser[] }) {
@@ -233,12 +193,10 @@ function ValueRaceChart({ users }: { users: SnapshotUser[] }) {
 function BenchmarkComparisonChart({
   labels,
   datasets,
-  axisBreak,
   axisScale,
 }: {
   labels: string[];
   datasets: BenchmarkDataset[];
-  axisBreak: PercentAxisBreak | null;
   axisScale: PercentAxisScale;
 }) {
   const width = 760;
@@ -281,7 +239,7 @@ function BenchmarkComparisonChart({
         <desc>Percent returns since the official Dec. 31, 2025 baseline.</desc>
         <g>
           {yTicks.map((rawTick) => {
-            const tick = transformPercent(rawTick, axisBreak) ?? rawTick;
+            const tick = rawTick;
             const y = yFor(tick);
             return (
               <g key={`y-${rawTick}`}>
@@ -315,12 +273,6 @@ function BenchmarkComparisonChart({
               </g>
             );
           })}
-          {axisBreak ? (
-            <g className={styles.axisBreakMark} transform={`translate(${margin.left - 24} ${yFor(axisBreak.from) - 7})`}>
-              <path d="M0 7 L8 0 L16 7" />
-              <path d="M0 16 L8 9 L16 16" />
-            </g>
-          ) : null}
           {datasets.map((dataset) => (
             <path
               key={dataset.label}
@@ -358,7 +310,12 @@ function HoldingRow({ user, index }: { user: SnapshotUser; index: number }) {
         </div>
       </td>
       <td data-label="Qty">{formatShares(user.shares)}</td>
-      <td data-label="Price">{formatPrice(user.latest_price)}</td>
+      <td data-label="Price">
+        <div>
+          {formatPrice(user.latest_price)}
+          <span className={styles.subtleText}>{user.quote_time}</span>
+        </div>
+      </td>
       <td data-label="Value">{formatCurrency(user.balance)}</td>
       <td data-label="Return" className={trendClass(user.ytd_return)}>
         {formatPct(user.ytd_return)}
@@ -425,6 +382,7 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
     try {
       const url = forceRefresh ? "/api/snapshot?refresh=1" : "/api/snapshot";
       const response = await fetch(url, { cache: "no-store" });
+      if (!response.ok) throw new Error(`Snapshot request failed: ${response.status}`);
       const data = (await response.json()) as SnapshotResponse;
 
       if (data._loading) {
@@ -564,10 +522,7 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
         return benchLabels.map((date) => map[date]);
       }),
     ].filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-    const benchmarkAxisBreak = createPercentAxisBreak(benchmarkRawValues);
-    const benchmarkAxisScale = createPercentAxisScale(benchmarkRawValues, benchmarkAxisBreak);
-    const mapBenchmarkValue = (value: number | null | undefined) =>
-      transformPercent(value == null ? null : value, benchmarkAxisBreak);
+    const benchmarkAxisScale = createPercentAxisScale(benchmarkRawValues);
 
     return {
       ytdOptions,
@@ -575,14 +530,13 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
         labels: ytdDates,
         datasets: ytdDatasets,
       },
-      benchmarkAxisBreak,
       benchmarkAxisScale,
       benchmark: {
         labels: benchLabels,
         datasets: [
           {
             label: "Group Average",
-            data: benchLabels.map((date) => mapBenchmarkValue(groupMap[date])),
+            data: benchLabels.map((date) => groupMap[date] ?? null),
             borderColor: GROUP_AVG_COLOR,
             borderWidth: 3,
             pointRadius: 0,
@@ -592,7 +546,7 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
           },
           {
             label: "Filtered Average",
-            data: benchLabels.map((date) => mapBenchmarkValue(filteredMap[date])),
+            data: benchLabels.map((date) => filteredMap[date] ?? null),
             borderColor: FILTERED_AVG_COLOR,
             borderWidth: 3,
             pointRadius: 0,
@@ -604,7 +558,7 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
             const map = buildMapped(snapshot.histories[ticker] ?? []);
             return {
               label: ticker,
-              data: benchLabels.map((date) => mapBenchmarkValue(map[date])),
+              data: benchLabels.map((date) => map[date] ?? null),
               borderColor: BENCH_COLORS[ticker] ?? "#64748b",
               borderDash: [6, 3],
               borderWidth: 2.2,
@@ -627,6 +581,8 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
 
   const leader = snapshot?.users[0] ?? null;
   const quoteFailures = snapshot?.quote_failures ?? [];
+  const historyFailures = snapshot?.history_failures ?? [];
+  const hasDataWarning = quoteFailures.length > 0 || historyFailures.length > 0;
   const stats = snapshot?.fetch_stats;
 
   return (
@@ -685,25 +641,29 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
             <article className={styles.metricCard}>
               <span>Filtered average</span>
               <strong className={trendClass(snapshot.filtered_avg)}>{formatPct(snapshot.filtered_avg)}</strong>
-              <small>Excludes crypto-adjacent picks</small>
+                <small>Excludes COIN, HOOD, and SOFI</small>
             </article>
             {snapshot.benchmarks.map((item) => (
               <article key={item.ticker} className={styles.metricCard}>
                 <span>{item.ticker}</span>
                 <strong className={trendClass(item.ytd_return)}>{formatPct(item.ytd_return)}</strong>
                 <small>{formatCurrency(item.balance)}</small>
+                <small>{item.quote_time}</small>
               </article>
             ))}
           </section>
 
-          <section className={`${styles.statusBanner} ${quoteFailures.length > 0 ? styles.warningBanner : ""}`}>
+          <section className={`${styles.statusBanner} ${hasDataWarning ? styles.warningBanner : ""}`}>
             <div>
-              <strong>{quoteFailures.length > 0 ? "Some quotes need attention" : "Quotes refreshed from batched Yahoo data"}</strong>
+              <strong>{hasDataWarning ? "Some market data needs attention" : "Quotes refreshed from batched Yahoo data"}</strong>
               <span>
                 {quoteFailures.length > 0
-                  ? `Missing latest quote for ${quoteFailures.join(", ")}. Rankings use available history where possible.`
+                  ? `Live quotes unavailable for ${quoteFailures.join(", ")}. Values use the dated closing prices shown in Holdings.`
                   : "Latest prices may include regular, pre-market, or after-hours quotes when Yahoo provides them."}
               </span>
+              {historyFailures.length > 0 ? (
+                <span>Daily history unavailable for {historyFailures.join(", ")}. Affected chart series are omitted.</span>
+              ) : null}
             </div>
             {stats ? (
               <dl className={styles.statsStrip}>
@@ -866,7 +826,6 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
                 <BenchmarkComparisonChart
                   labels={charts.benchmark.labels}
                   datasets={charts.benchmark.datasets}
-                  axisBreak={charts.benchmarkAxisBreak}
                   axisScale={charts.benchmarkAxisScale}
                 />
               </div>

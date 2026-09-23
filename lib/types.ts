@@ -19,6 +19,7 @@ export type QuoteSession =
   | "extended-hours"
   | "regular"
   | "previous-close"
+  | "daily-close"
   | "chart-fallback";
 
 export type QuoteMeta = {
@@ -78,6 +79,7 @@ export type SnapshotResponse = {
   data_provider: string;
   quote_meta?: Record<string, QuoteMeta>;
   quote_failures?: string[];
+  history_failures?: string[];
   fetch_stats?: MarketDataStats;
   _loading?: boolean;
 };
