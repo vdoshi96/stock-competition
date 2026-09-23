@@ -27,6 +27,14 @@ Both domains belong to the `stock-competition` Vercel project, which deploys fro
 - If live quotes fail, dated daily closes supply consistent prices and valuations. Missing histories are flagged and omitted; group histories require every member's price on that date.
 - Missing baselines or valuations reject the refresh, retaining an available cached snapshot rather than publishing zero returns.
 
+## Dashboard
+
+- One standings table ranks picks by return and shows daily change, rank movement since the previous close, the gap to SPY in percentage points, and a balance bar centered on the $1,000 start. Select a name for shares, prices, and the quote time.
+- The performance chart offers Top 3 + SPY, Everyone, Group vs market, and Custom presets, with 1W, 1M, 3M, and YTD ranges.
+- The page refreshes every five minutes while visible. A failed refresh keeps the last snapshot on screen.
+- Copy standings writes a plain-text ranking to the clipboard.
+- The design audit and renders are in `docs/design/ui-ux-audit.html`.
+
 ## Local setup
 
 1. Copy `.env.example` to `.env.local`.
@@ -58,7 +66,7 @@ Use `https://stock-competition-blush.vercel.app` for the repository homepage and
 
 ## Verification
 
-Run `npm run lint`, `npm test`, and `npm run build` before merging. Regression tests cover partially null Yahoo rows, full-precision calculations, Eastern Time quote dates, provider-call counts, and incomplete-data handling.
+Run `npm run lint`, `npm test`, `npm run build`, and `npm run test:e2e` before merging. The end-to-end suite serves a fixed snapshot fixture, so it never calls Yahoo Finance. Regression tests cover partially null Yahoo rows, full-precision calculations, Eastern Time quote dates, provider-call counts, and incomplete-data handling.
 
 After deployment, run `npm run verify:live -- https://stock-competition-blush.vercel.app`. The check compares every displayed metric and chart point with the locked baseline and independently fetched Yahoo data. It saves the verification summary in `output/playwright/metrics-verification.json`.
 

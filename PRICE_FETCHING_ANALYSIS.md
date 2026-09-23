@@ -65,7 +65,7 @@ Before the batching work, the primary app combined history and quote fetching in
 - Load `/` on desktop and mobile widths.
 - Confirm loading, error, and ready states render without layout shift.
 - Confirm `GET /api/snapshot` returns one quote batch for all symbols in `fetch_stats`.
-- Confirm leaderboard ranks, metric cards, charts, and holdings all use the same snapshot payload.
+- Confirm the standings, summary tiles, and performance chart all use the same snapshot payload.
 - Force-refresh with the Refresh button and confirm the UI recovers from loading/error states.
 - Confirm dark mode colors remain readable under `prefers-color-scheme: dark`.
 

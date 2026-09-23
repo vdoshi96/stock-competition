@@ -1,5 +1,11 @@
 # Project status
 
+## UI/UX redesign: September 22, 2026
+
+- The dashboard uses one standings table, a leader card with four stat tiles, a competition progress strip, and one performance chart with presets and ranges.
+- Acceptance tests: `npm run test:e2e` (17 tests, fixture-served, no provider calls) and the Vitest suites for the dashboard model, contrast tokens, and snapshot timestamp.
+- Design reference: `docs/design/ui-ux-audit.html`.
+
 ## Release maintenance: September 22, 2026
 
 - Production project: `vdoshi96s-projects/stock-competition`, connected to GitHub `vdoshi96/stock-competition`, branch `main`.
@@ -14,7 +20,7 @@
 
 - `npm run lint`, `npm test` (22 tests), `npm run build`, and generated HTML parity passed.
 - The independent Yahoo audit checked nine participants, three benchmarks, all locked baselines, and 2,548 chart points against the local production build. Each ticker had 182 points, including baseline and the September 22 quote.
-- Browser interactions checked all 18 table rows, summary cards, refresh, empty and selected chart states, and all nine balance bars. Desktop (1440 px) and mobile (390 px, light and dark) checks found no horizontal overflow, overlapping benchmark ticks, browser warnings, errors, or failed requests.
+- Browser behavior is covered by `npm run test:e2e`; see the UI/UX redesign section.
 - `npm run verify:live` repeats the provider comparison against production and saves `output/playwright/metrics-verification.json`. Browser evidence is retained in the same ignored directory; retain only the completed release's evidence.
 
 ## Maintenance notes

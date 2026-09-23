@@ -51,6 +51,14 @@
 <li>If live quotes fail, dated daily closes supply consistent prices and valuations. Missing histories are flagged and omitted; group histories require every member&#39;s price on that date.</li>
 <li>Missing baselines or valuations reject the refresh, retaining an available cached snapshot rather than publishing zero returns.</li>
 </ul>
+<h2>Dashboard</h2>
+<ul>
+<li>One standings table ranks picks by return and shows daily change, rank movement since the previous close, the gap to SPY in percentage points, and a balance bar centered on the $1,000 start. Select a name for shares, prices, and the quote time.</li>
+<li>The performance chart offers Top 3 + SPY, Everyone, Group vs market, and Custom presets, with 1W, 1M, 3M, and YTD ranges.</li>
+<li>The page refreshes every five minutes while visible. A failed refresh keeps the last snapshot on screen.</li>
+<li>Copy standings writes a plain-text ranking to the clipboard.</li>
+<li>The design audit and renders are in <code>docs/design/ui-ux-audit.html</code>.</li>
+</ul>
 <h2>Local setup</h2>
 <ol>
 <li>Copy <code>.env.example</code> to <code>.env.local</code>.</li>
@@ -79,7 +87,7 @@ npm run dev
 </li>
 </ul>
 <h2>Verification</h2>
-<p>Run <code>npm run lint</code>, <code>npm test</code>, and <code>npm run build</code> before merging. Regression tests cover partially null Yahoo rows, full-precision calculations, Eastern Time quote dates, provider-call counts, and incomplete-data handling.</p>
+<p>Run <code>npm run lint</code>, <code>npm test</code>, <code>npm run build</code>, and <code>npm run test:e2e</code> before merging. The end-to-end suite serves a fixed snapshot fixture, so it never calls Yahoo Finance. Regression tests cover partially null Yahoo rows, full-precision calculations, Eastern Time quote dates, provider-call counts, and incomplete-data handling.</p>
 <p>After deployment, run <code>npm run verify:live -- https://stock-competition-blush.vercel.app</code>. The check compares every displayed metric and chart point with the locked baseline and independently fetched Yahoo data. It saves the verification summary in <code>output/playwright/metrics-verification.json</code>.</p>
 <h2>Documentation</h2>
 <p>Tracked project-owned prose sources are canonical. The inventory is index-based so private untracked notes remain untouched; stage a new project-owned source before regenerating its deterministic same-directory HTML companion:</p>
