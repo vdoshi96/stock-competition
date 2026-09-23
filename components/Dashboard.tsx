@@ -54,6 +54,9 @@ export function Dashboard({ githubRepoUrl }: { githubRepoUrl: string | null }) {
 
   return (
     <div className={styles.page}>
+      <a href="#standings" className={styles.skipLink}>
+        Skip to standings
+      </a>
       <AppHeader snapshot={snapshot} now={data.now} refreshing={data.refreshing} onRefresh={data.refresh} />
       <main className={styles.main}>
         {status === "ready" && snapshot ? (
