@@ -76,6 +76,7 @@ export type SnapshotResponse = {
   filtered_avg_history: SeriesPoint[];
   histories: Record<string, SeriesPoint[]>;
   updated_at: string;
+  updated_at_iso: string;
   data_provider: string;
   quote_meta?: Record<string, QuoteMeta>;
   quote_failures?: string[];
