@@ -37,6 +37,14 @@
 <li>Use the quote&#39;s New York calendar date and show quote timestamps. A fresher dated historical close takes precedence over an older quote.</li>
 <li>Use a linear benchmark axis; avoid compressed ranges that crowd labels and obscure the scale.</li>
 </ul>
+<h2>September 22, 2026</h2>
+<ul>
+<li>Replace the Leaderboard, Holdings, and Current Value lists with one standings table. Show secondary price data in expandable rows.</li>
+<li>Derive daily change, rank movement, market comparison, and share text on the client from the existing snapshot. The only API addition is <code>updated_at_iso</code>.</li>
+<li>Keep the last good snapshot visible when a refresh fails. Auto-refresh every five minutes while the tab is visible.</li>
+<li>Use one Chart.js chart with presets instead of a separate benchmark SVG chart. Colors stay fixed per ticker.</li>
+<li>Freeze the acceptance suite (<code>tests/e2e/dashboard.spec.ts</code>, fixture, and unit tests) before implementation; implementation changes code, not tests.</li>
+</ul>
   </main>
 </body>
 </html>

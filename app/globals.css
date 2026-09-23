@@ -1,14 +1,14 @@
 :root {
   color-scheme: light dark;
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --bg: #ffffff;
+  --bg: #f5f7fb;
   --text-main: #071427;
-  --text-muted: #607089;
+  --text-muted: #5b6b84;
   --surface: #ffffff;
   --muted-surface: #f6f8fb;
   --surface-border: #d8e0ec;
-  --surface-shadow: 0 18px 48px rgba(15, 46, 92, 0.08);
-  --header-bg: rgba(255, 255, 255, 0.9);
+  --surface-shadow: 0 1px 2px rgba(15, 46, 92, 0.06), 0 8px 24px rgba(15, 46, 92, 0.06);
+  --header-bg: rgba(255, 255, 255, 0.92);
   --header-border: #d8e0ec;
   --button-bg: #1266f1;
   --button-text: #ffffff;
@@ -16,17 +16,21 @@
   --button-secondary-bg: #ffffff;
   --button-secondary-text: #071427;
   --button-secondary-border: #c8d3e3;
-  --table-head-bg: #f8fafc;
+  --table-head-bg: #f6f8fb;
   --rank-bg: #eff6ff;
   --rank-text: #1254c8;
-  --symbol-bg: #071427;
-  --symbol-text: #ffffff;
-  --positive: #009e73;
-  --negative: #d92d20;
-  --warning: #c77913;
+  --positive: #007a5a;
+  --negative: #c4291c;
+  --warning: #b86e0f;
+  --warning-surface: #fff7e8;
+  --warning-border: #f3d19a;
+  --danger-surface: #fff1f0;
+  --danger-border: #f5c2bd;
+  --focus-ring: #1266f1;
   --chart-text: #40516b;
   --chart-grid: #e6ebf3;
-  --skeleton-a: #edf3fb;
+  --chart-zero: #9aa9bf;
+  --skeleton-a: #e9eff8;
   --skeleton-b: #f8fbff;
 }
 
@@ -37,6 +41,7 @@
 html {
   min-height: 100%;
   background: var(--bg);
+  scroll-padding-top: 72px;
 }
 
 body {
@@ -62,6 +67,23 @@ a {
   background: #1266f1;
 }
 
+:where(a, button, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #07101f;
@@ -70,8 +92,8 @@ a {
     --surface: #0d1829;
     --muted-surface: #121f33;
     --surface-border: #24344d;
-    --surface-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
-    --header-bg: rgba(7, 16, 31, 0.86);
+    --surface-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    --header-bg: rgba(7, 16, 31, 0.88);
     --header-border: #24344d;
     --button-bg: #4b8cff;
     --button-text: #07101f;
@@ -82,14 +104,28 @@ a {
     --table-head-bg: #101c2f;
     --rank-bg: #102a53;
     --rank-text: #91b9ff;
-    --symbol-bg: #071427;
-    --symbol-text: #ffffff;
     --positive: #4fd7a4;
     --negative: #ff7a70;
     --warning: #f6c66d;
+    --warning-surface: #2a2110;
+    --warning-border: #5c4717;
+    --danger-surface: #2c1414;
+    --danger-border: #6b2a26;
+    --focus-ring: #91b9ff;
     --chart-text: #c9d6e8;
     --chart-grid: #253851;
+    --chart-zero: #5b6f8e;
     --skeleton-a: #13213a;
     --skeleton-b: #1a2b49;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
   }
 }

@@ -11,3 +11,5 @@ coverage/
 .playwright-cli/
 output/
 *.tsbuildinfo
+CLAUDE.html
+CLAUDE.md

@@ -168,6 +168,7 @@ export function buildSnapshotResponse(
     }
   }
 
+  const computedAt = new Date();
   return {
     users,
     benchmarks,
@@ -178,7 +179,8 @@ export function buildSnapshotResponse(
     histories: Object.fromEntries(Object.entries(histories).map(([ticker, points]) => [
       ticker, points.map((point) => ({ ...point, value: round2(point.value) })),
     ])),
-    updated_at: formatUpdatedAt(),
+    updated_at: formatUpdatedAt(computedAt),
+    updated_at_iso: computedAt.toISOString(),
     data_provider: providerLabel,
     quote_meta: quoteMetaByTicker,
     quote_failures: quoteFailures,

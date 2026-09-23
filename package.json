@@ -13,7 +13,8 @@
     "docs:generate": "node scripts/generate-docs.mjs --write",
     "docs:check": "node scripts/generate-docs.mjs --check",
     "baseline:generate": "node scripts/generate-baseline.mjs",
-    "verify:live": "node scripts/verify-live.mjs"
+    "verify:live": "node scripts/verify-live.mjs",
+    "test:e2e": "playwright test"
   },
   "keywords": [],
   "author": "",
@@ -29,6 +30,7 @@
     "yahoo-finance2": "^3.14.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/node": "^25.5.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

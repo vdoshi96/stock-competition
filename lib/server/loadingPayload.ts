@@ -25,6 +25,7 @@ export async function buildLoadingPayload(): Promise<SnapshotResponse> {
     filtered_avg_history: [],
     histories: {},
     updated_at: "Loading data...",
+    updated_at_iso: new Date().toISOString(),
     data_provider: "Loading",
     quote_meta: {},
     quote_failures: [],
