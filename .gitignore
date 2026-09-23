@@ -13,3 +13,5 @@ output/
 *.tsbuildinfo
 CLAUDE.html
 CLAUDE.md
+AGENTS.html
+AGENTS.md

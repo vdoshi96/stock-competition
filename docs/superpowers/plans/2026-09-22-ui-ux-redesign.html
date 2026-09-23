@@ -49,7 +49,10 @@
 <li><strong>Don&#39;t change server logic</strong> beyond Task 1. Don&#39;t touch <code>lib/server/marketData.ts</code>, <code>snapshotService.ts</code>, <code>cache.ts</code>, <code>baseline_prices.json</code>, or <code>User_stockpicks.md</code>.</li>
 <li><strong>Don&#39;t invent scope.</strong> No dark-mode toggle, no new routes, no new API fields other than <code>updated_at_iso</code>, no storybook, no refactors of files this plan doesn&#39;t list, no extra documentation beyond Task 10.</li>
 <li><strong>Copy code blocks exactly.</strong> The code in this plan is the reference implementation. Deviate only when a frozen test or <code>tsc</code> proves the block wrong, and record each deviation in your final report with the reason.</li>
-<li><strong>Stop and report</strong> instead of guessing if a step&#39;s expected output doesn&#39;t match after two honest attempts.</li>
+<li><strong>Stop and report</strong> instead of guessing if a step&#39;s expected output doesn&#39;t match after two honest attempts.<ul>
+<li>One exception, for <strong>Step 1 red baselines only</strong>: if a test in the named suite already passes because an earlier task&#39;s reference code covers it, note it in your report and continue. The failing tests must be a subset of the suite&#39;s named tests. Stop if more tests fail than expected, a test outside the suite runs, or anything errors instead of failing an assertion.</li>
+</ul>
+</li>
 <li><strong>Next.js 16 notice:</strong> <code>AGENTS.md</code> says to read the relevant guide in <code>node_modules/next/dist/docs/</code> before writing Next-specific code. This plan only uses <code>&quot;use client&quot;</code> components, <code>next/image</code>, and CSS Modules. Skim the client-components and images guides once.</li>
 </ol>
 <h2>Win conditions</h2>
@@ -105,7 +108,7 @@
 <tr>
 <td>W9</td>
 <td>Visual check</td>
-<td>The four screenshots in <code>output/playwright/redesign-*.png</code> match the renders in <code>docs/design/ui-ux-audit.html</code> on the points listed in Task 10, Step 4</td>
+<td>The three screenshots in <code>output/playwright/redesign-*.png</code> match the renders in <code>docs/design/ui-ux-audit.html</code> on the points listed in Task 10, Step 4</td>
 </tr>
 </tbody></table>
 <p>Run W5 with nothing else listening on port 3107. The Playwright config always builds and starts a fresh production server.</p>
@@ -2534,7 +2537,7 @@ git commit -m &quot;feat: replace duplicate participant lists with one standings
 <li><p><input disabled="" type="checkbox"> <strong>Step 1: Run the failing tests</strong></p>
 </li>
 </ul>
-<p>Run: <code>npx playwright test -g &quot;header and refresh&quot;</code><br>Expected: 5 failed.</p>
+<p>Run: <code>npx playwright test -g &quot;header and refresh&quot;</code><br>Expected: 4 failed, 1 passed (&quot;auto-refreshes every five minutes while the tab is visible&quot; already passes because Task 4&#39;s <code>useSnapshot</code> includes the auto-refresh timer).</p>
 <ul>
 <li><input disabled="" type="checkbox"> <strong>Step 2: Create <code>components/dashboard/AppHeader.tsx</code></strong></li>
 </ul>

@@ -25,6 +25,7 @@ These rules are not optional. Breaking any of them fails the handoff even if the
 5. **Don't invent scope.** No dark-mode toggle, no new routes, no new API fields other than `updated_at_iso`, no storybook, no refactors of files this plan doesn't list, no extra documentation beyond Task 10.
 6. **Copy code blocks exactly.** The code in this plan is the reference implementation. Deviate only when a frozen test or `tsc` proves the block wrong, and record each deviation in your final report with the reason.
 7. **Stop and report** instead of guessing if a step's expected output doesn't match after two honest attempts.
+   - One exception, for **Step 1 red baselines only**: if a test in the named suite already passes because an earlier task's reference code covers it, note it in your report and continue. The failing tests must be a subset of the suite's named tests. Stop if more tests fail than expected, a test outside the suite runs, or anything errors instead of failing an assertion.
 8. **Next.js 16 notice:** `AGENTS.md` says to read the relevant guide in `node_modules/next/dist/docs/` before writing Next-specific code. This plan only uses `"use client"` components, `next/image`, and CSS Modules. Skim the client-components and images guides once.
 
 ## Win conditions
@@ -41,7 +42,7 @@ The work is done when every command below produces the stated result on branch `
 | W6 | `shasum -a 256 playwright.config.ts tests/cache.test.ts tests/contrast.test.ts tests/dashboardModel.test.ts tests/snapshotTimestamp.test.ts tests/e2e/dashboard.spec.ts tests/fixtures/snapshotFixture.ts` | Exactly the hashes in [Frozen file hashes](#frozen-file-hashes) |
 | W7 | `git ls-files tests playwright.config.ts` | Exactly these 10 paths: `playwright.config.ts`, `tests/cache.test.ts`, `tests/competitionMath.test.ts`, `tests/contrast.test.ts`, `tests/dashboardModel.test.ts`, `tests/e2e/dashboard.spec.ts`, `tests/fixtures/snapshotFixture.ts`, `tests/marketData.test.ts`, `tests/snapshotService.test.ts`, `tests/snapshotTimestamp.test.ts` |
 | W8 | `grep -rnE "ValueRaceChart\|BenchmarkComparisonChart\|HoldingRow\|Live Stock Rows\|statsStrip" components app` | No output |
-| W9 | Visual check | The four screenshots in `output/playwright/redesign-*.png` match the renders in `docs/design/ui-ux-audit.html` on the points listed in Task 10, Step 4 |
+| W9 | Visual check | The three screenshots in `output/playwright/redesign-*.png` match the renders in `docs/design/ui-ux-audit.html` on the points listed in Task 10, Step 4 |
 
 Run W5 with nothing else listening on port 3107. The Playwright config always builds and starts a fresh production server.
 
@@ -2302,7 +2303,7 @@ git commit -m "feat: replace duplicate participant lists with one standings tabl
 - [ ] **Step 1: Run the failing tests**
 
 Run: `npx playwright test -g "header and refresh"`
-Expected: 5 failed.
+Expected: 4 failed, 1 passed ("auto-refreshes every five minutes while the tab is visible" already passes because Task 4's `useSnapshot` includes the auto-refresh timer).
 
 - [ ] **Step 2: Create `components/dashboard/AppHeader.tsx`**
 
